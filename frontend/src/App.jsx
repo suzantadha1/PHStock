@@ -153,11 +153,6 @@ function FilterBar({ locations, activeLoc, setActiveLoc }) {
           <span>{l.name}</span>
         </button>
       ))}
-      <div className="tb-spacer" />
-      <button type="button" className="chip" style={{ color: 'var(--ink-3)' }}>
-        <Icon name="filter" size={12} />
-        More filters
-      </button>
     </div>
   )
 }

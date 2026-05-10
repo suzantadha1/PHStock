@@ -819,4 +819,9 @@ body {
 
   /* Donut chart — shrink a bit */
   .donut-center .val { font-size: 32px; }
+
+  /* History date range — stack vertically */
+  .date-range-row { flex-direction: column; align-items: stretch; }
+  .date-range-row > div { width: 100%; }
+  .date-range-row input[type="date"] { width: 100%; }
 }

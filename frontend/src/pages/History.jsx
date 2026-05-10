@@ -288,7 +288,7 @@ function History({ activeLoc, locations, searchQ = '', profile }) {
         )}
 
         {/* Date range */}
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <div className="date-range-row" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <label style={FILTER_LABEL}>From</label>
             <input
