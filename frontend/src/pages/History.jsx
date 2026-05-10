@@ -48,6 +48,28 @@ function buildRegister(entries) {
   return rows
 }
 
+function Pagination({ page, total, count, onPrev, onNext }) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      padding: '12px 20px',
+      borderTop: '1px solid var(--line)',
+      background: 'var(--surface-2)',
+    }}>
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-3)', letterSpacing: '.06em' }}>
+        {((page - 1) * 50) + 1}–{Math.min(page * 50, count)} of {count}
+      </span>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <button className="btn" onClick={onPrev} disabled={page === 1} style={{ padding: '4px 12px', fontSize: 13 }}>← Prev</button>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-2)', alignSelf: 'center', minWidth: 60, textAlign: 'center' }}>
+          {page} / {total}
+        </span>
+        <button className="btn" onClick={onNext} disabled={page === total} style={{ padding: '4px 12px', fontSize: 13 }}>Next →</button>
+      </div>
+    </div>
+  )
+}
+
 function EditModal({ entry, locations, grades, onSave, onCancel }) {
   const [date, setDate] = useState(entry.date)
   const [noteNumber, setNoteNumber] = useState(entry.noteNumber || '')
@@ -77,7 +99,7 @@ function EditModal({ entry, locations, grades, onSave, onCancel }) {
         border: '1px solid var(--line)',
         borderRadius: 'var(--radius-card)',
         boxShadow: 'var(--shadow-2)',
-        width: '100%', maxWidth: 440,
+        width: '100%', maxWidth: 440, minWidth: 0,
         display: 'flex', flexDirection: 'column',
         overflow: 'hidden',
       }} onClick={e => e.stopPropagation()}>
@@ -111,7 +133,7 @@ function EditModal({ entry, locations, grades, onSave, onCancel }) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
             <div className="field">
               <div className="field-label">Date</div>
-              <input type="date" className="field-input" value={date} onChange={e => setDate(e.target.value)} />
+              <input type="date" className="field-input" value={date} onChange={e => setDate(e.target.value)} style={{ minWidth: 0 }} />
             </div>
             <div className="field">
               <div className="field-label">Note number</div>
@@ -245,6 +267,11 @@ function History({ activeLoc, locations, searchQ = '', profile }) {
   const [filterTo, setFilterTo] = useState('')
   const [grades, setGrades] = useState([])
 
+  // Pagination
+  const PAGE_SIZE = 50
+  const [movPage, setMovPage] = useState(1)
+  const [regPage, setRegPage] = useState(1)
+
   useEffect(() => {
     fetchEntries()
   }, [activeLoc])
@@ -254,6 +281,9 @@ function History({ activeLoc, locations, searchQ = '', profile }) {
       if (data?.length) setGrades(data.map(g => g.name))
     })
   }, [])
+
+  useEffect(() => { setMovPage(1) }, [filterGrade, filterFrom, filterTo, kind, searchQ, view])
+  useEffect(() => { setRegPage(1) }, [filterGrade, filterFrom, filterTo, searchQ, view])
 
   // If the grades table is empty, derive grade options from loaded entries
   const gradeOptions = grades.length > 0
@@ -424,6 +454,11 @@ function History({ activeLoc, locations, searchQ = '', profile }) {
   const regTotalIn = registerRows.reduce((s, r) => s + r.newStock, 0)
   const regTotalSold = registerRows.reduce((s, r) => s + r.sold, 0)
 
+  const movTotalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const regTotalPages = Math.max(1, Math.ceil(registerRows.length / PAGE_SIZE))
+  const filteredPage = filtered.slice((movPage - 1) * PAGE_SIZE, movPage * PAGE_SIZE)
+  const registerPage = registerRows.slice((regPage - 1) * PAGE_SIZE, regPage * PAGE_SIZE)
+
   return (
     <>
     <div className="col">
@@ -529,61 +564,63 @@ function History({ activeLoc, locations, searchQ = '', profile }) {
           </div>
         )}
 
-        {/* Date range */}
-        <div className="date-range-row" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <label style={FILTER_LABEL}>From</label>
-            <input
-              type="date"
-              value={filterFrom}
-              onChange={e => setFilterFrom(e.target.value)}
-              className="field-input"
-              style={{ fontSize: 13, padding: '7px 10px' }}
-            />
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <label style={FILTER_LABEL}>To</label>
-            <input
-              type="date"
-              value={filterTo}
-              onChange={e => setFilterTo(e.target.value)}
-              className="field-input"
-              style={{ fontSize: 13, padding: '7px 10px' }}
-            />
-          </div>
-        </div>
-
-        {/* Type — movements view only */}
-        {view === 'movements' && (
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <label style={FILTER_LABEL}>Type</label>
-            <div style={{ display: 'flex', gap: 4 }}>
-              {[
-                { value: 'all', label: 'All' },
-                { value: 'in',  label: 'In' },
-                { value: 'out', label: 'Out' },
-              ].map(({ value, label }) => {
-                const isActive = kind === value
-                const activeStyle = value === 'in'
-                  ? { color: 'var(--grade-a)', background: 'color-mix(in oklab, var(--grade-a) 12%, var(--surface))', borderColor: 'color-mix(in oklab, var(--grade-a) 35%, transparent)' }
-                  : value === 'out'
-                    ? { color: 'var(--warn)', background: 'color-mix(in oklab, var(--warn) 12%, var(--surface))', borderColor: 'color-mix(in oklab, var(--warn) 35%, transparent)' }
-                    : { color: 'var(--ink)', background: 'var(--bg-2)', borderColor: 'var(--line-strong)' }
-                return (
-                  <button
-                    key={value}
-                    type="button"
-                    className={'subtab' + (isActive ? ' is-on' : '')}
-                    onClick={() => setKind(value)}
-                    style={isActive ? activeStyle : {}}
-                  >
-                    {label}
-                  </button>
-                )
-              })}
+        {/* Date range + Type */}
+        <div className="filter-date-type">
+          <div className="date-range-row" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <label style={FILTER_LABEL}>From</label>
+              <input
+                type="date"
+                value={filterFrom}
+                onChange={e => setFilterFrom(e.target.value)}
+                className="field-input"
+                style={{ fontSize: 13, padding: '7px 10px', minWidth: 0 }}
+              />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <label style={FILTER_LABEL}>To</label>
+              <input
+                type="date"
+                value={filterTo}
+                onChange={e => setFilterTo(e.target.value)}
+                className="field-input"
+                style={{ fontSize: 13, padding: '7px 10px', minWidth: 0 }}
+              />
             </div>
           </div>
-        )}
+
+          {/* Type — movements view only */}
+          {view === 'movements' && (
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <label style={FILTER_LABEL}>Type</label>
+              <div style={{ display: 'flex', gap: 4 }}>
+                {[
+                  { value: 'all', label: 'All' },
+                  { value: 'in',  label: 'In' },
+                  { value: 'out', label: 'Out' },
+                ].map(({ value, label }) => {
+                  const isActive = kind === value
+                  const activeStyle = value === 'in'
+                    ? { color: 'var(--grade-a)', background: 'color-mix(in oklab, var(--grade-a) 12%, var(--surface))', borderColor: 'color-mix(in oklab, var(--grade-a) 35%, transparent)' }
+                    : value === 'out'
+                      ? { color: 'var(--warn)', background: 'color-mix(in oklab, var(--warn) 12%, var(--surface))', borderColor: 'color-mix(in oklab, var(--warn) 35%, transparent)' }
+                      : { color: 'var(--ink)', background: 'var(--bg-2)', borderColor: 'var(--line-strong)' }
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      className={'subtab' + (isActive ? ' is-on' : '')}
+                      onClick={() => setKind(value)}
+                      style={isActive ? activeStyle : {}}
+                    >
+                      {label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* Clear */}
         {(isFiltered || kind !== 'all') && (
@@ -622,7 +659,7 @@ function History({ activeLoc, locations, searchQ = '', profile }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map(h => {
+                  {filteredPage.map(h => {
                     const locName = locations.find(l => l.id === h.locId)?.name || h.locId
                     const totalKg = h.bags * (h.unitWeight || 0)
                     return (
@@ -686,6 +723,9 @@ function History({ activeLoc, locations, searchQ = '', profile }) {
                 <div className="hint">No entries match your filter.</div>
               </div>
             )}
+            {!loading && movTotalPages > 1 && (
+              <Pagination page={movPage} total={movTotalPages} count={filtered.length} onPrev={() => setMovPage(p => p - 1)} onNext={() => setMovPage(p => p + 1)} />
+            )}
           </div>
         </div>
       )}
@@ -714,7 +754,7 @@ function History({ activeLoc, locations, searchQ = '', profile }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {registerRows.map((r, i) => {
+                  {registerPage.map((r, i) => {
                     const locName = locations.find(l => String(l.id) === String(r.locId))?.name || r.locId
                     return (
                       <tr key={`${r.date}-${r.locId}-${r.grade}-${i}`}>
@@ -746,6 +786,9 @@ function History({ activeLoc, locations, searchQ = '', profile }) {
               <div style={{ padding: '48px 22px', color: 'var(--ink-3)', textAlign: 'center' }}>
                 <div className="hint">No entries match your filter.</div>
               </div>
+            )}
+            {!loading && regTotalPages > 1 && (
+              <Pagination page={regPage} total={regTotalPages} count={registerRows.length} onPrev={() => setRegPage(p => p - 1)} onNext={() => setRegPage(p => p + 1)} />
             )}
           </div>
         </div>

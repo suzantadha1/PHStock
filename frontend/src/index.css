@@ -715,6 +715,8 @@ body {
   align-items: start;
 }
 
+.filter-date-type { display: flex; flex-direction: row; gap: 20px; align-items: flex-end; flex-wrap: wrap; }
+
 /* ───── MEDIUM / HALF-SCREEN DESKTOP (768–960px) ───────────── */
 @media (max-width: 960px) and (min-width: 768px) {
   .grid-4   { grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -833,4 +835,5 @@ body {
   .date-range-row { flex-direction: column; align-items: stretch; }
   .date-range-row > div { width: 100%; }
   .date-range-row input[type="date"] { width: 100%; }
+  .filter-date-type { flex-direction: column; gap: 12px; }
 }
