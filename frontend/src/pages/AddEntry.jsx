@@ -38,10 +38,6 @@ function AddEntry({ profile, defaultLoc, locations, onSaved }) {
         setLocalLocations([workerLoc])
         setLocId(workerLoc.id)
       }
-    } else if (defaultLoc && defaultLoc !== 'all' && locations.length > 0) {
-      setLocId(defaultLoc)
-    } else if (locations.length > 0) {
-      setLocId(locations[0].id)
     }
   }, [profile, defaultLoc, locations])
 
@@ -264,11 +260,12 @@ function AddEntry({ profile, defaultLoc, locations, onSaved }) {
           <div className="field">
             <div className="field-label">Note Number</div>
             <input
-              type="text"
-              className="field-input"
+              type="number"
+              className="field-input field-num"
               value={noteNumber}
               onChange={e => { setNoteNumber(e.target.value); setFieldErrors(f => ({ ...f, noteNumber: null })) }}
-              placeholder="e.g. INV-001"
+              placeholder="e.g. 1001"
+              min="0"
             />
             <FieldError field="noteNumber" />
           </div>
@@ -423,29 +420,12 @@ function AddEntry({ profile, defaultLoc, locations, onSaved }) {
           {/* Bag count */}
           <div className="field">
             <div className="field-label">Bag count</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <button
-                type="button" className="btn"
-                style={{ width: 44, justifyContent: 'center', flexShrink: 0 }}
-                onClick={() => setBags(Math.max(0, (+bags || 0) - 10))}
-              >
-                −10
-              </button>
-              <input
-                type="number"
-                className="field-input field-num"
-                value={bags}
-                onChange={e => { setBags(Math.max(0, +e.target.value || 0)); setFieldErrors(f => ({ ...f, bags: null })) }}
-                style={{ textAlign: 'center', flex: 1 }}
-              />
-              <button
-                type="button" className="btn"
-                style={{ width: 44, justifyContent: 'center', flexShrink: 0 }}
-                onClick={() => setBags((+bags || 0) + 10)}
-              >
-                +10
-              </button>
-            </div>
+            <input
+              type="number"
+              className="field-input field-num"
+              value={bags}
+              onChange={e => { setBags(Math.max(0, +e.target.value || 0)); setFieldErrors(f => ({ ...f, bags: null })) }}
+            />
             <FieldError field="bags" />
           </div>
 

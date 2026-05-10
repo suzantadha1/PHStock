@@ -92,7 +92,8 @@ function KPI({ label, value, unit, delta, deltaLabel, dir, spark, sparkColor }) 
   )
 }
 
-function LocBar({ label, segments, total, max, onHover }) {
+function LocBar({ label, segments, total, max }) {
+  const [tip, setTip] = useState(false)
   const active = segments.filter(s => s.value > 0)
   const trackPct = total > 0 && max > 0 ? (total / max) * 100 : 0
   return (
@@ -104,34 +105,63 @@ function LocBar({ label, segments, total, max, onHover }) {
       }}>
         {label}
       </div>
-      <div style={{ flex: 1, height: 40, borderRadius: 8, overflow: 'hidden', background: 'var(--surface-2)', display: 'flex' }}>
-        {active.map(s => {
-          const w = (s.value / total) * trackPct
-          return (
-            <div
-              key={s.key}
-              style={{
-                width: `${w}%`, height: '100%', background: s.color,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                overflow: 'hidden', cursor: 'default', flexShrink: 0,
-                transition: 'filter .1s',
-              }}
-              onMouseEnter={e => { e.currentTarget.style.filter = 'brightness(1.12)'; onHover && onHover(s) }}
-              onMouseLeave={e => { e.currentTarget.style.filter = ''; onHover && onHover(null) }}
-            >
-              {w > 5 && (
-                <span style={{
-                  fontSize: 10, color: '#fff', fontWeight: 700,
-                  fontFamily: 'var(--font-mono)',
-                  textShadow: '0 1px 2px rgba(0,0,0,.3)',
-                  whiteSpace: 'nowrap', pointerEvents: 'none',
-                }}>
-                  {s.value.toLocaleString()}
-                </span>
-              )}
+      <div
+        style={{ flex: 1, position: 'relative', cursor: 'default' }}
+        onMouseEnter={() => setTip(true)}
+        onMouseLeave={() => setTip(false)}
+        onClick={() => setTip(t => !t)}
+      >
+        <div className="loc-bar-track" style={{ borderRadius: 8, overflow: 'hidden', background: 'var(--surface-2)', display: 'flex' }}>
+          {active.map(s => {
+            const w = (s.value / total) * trackPct
+            return (
+              <div
+                key={s.key}
+                style={{
+                  width: `${w}%`, height: '100%', background: s.color, flexShrink: 0,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+                }}
+              >
+                {w > 5 && (
+                  <span className="loc-bar-num" style={{
+                    fontSize: 10, color: '#fff', fontWeight: 700,
+                    fontFamily: 'var(--font-mono)',
+                    textShadow: '0 1px 2px rgba(0,0,0,.3)',
+                    whiteSpace: 'nowrap', pointerEvents: 'none',
+                  }}>
+                    {s.value.toLocaleString()}
+                  </span>
+                )}
+              </div>
+            )
+          })}
+        </div>
+        {tip && (
+          <div style={{
+            position: 'absolute',
+            bottom: 'calc(100% + 6px)',
+            left: 0,
+            background: 'var(--surface)',
+            border: '1px solid var(--line-strong)',
+            borderRadius: 'var(--radius-input)',
+            padding: '8px 12px',
+            boxShadow: 'var(--shadow-2)',
+            zIndex: 10,
+            minWidth: 160,
+            pointerEvents: 'none',
+          }}>
+            {active.map(s => (
+              <div key={s.key} style={{ display: 'flex', justifyContent: 'space-between', gap: 16, fontSize: 12, marginBottom: 4 }}>
+                <span style={{ color: s.color, fontWeight: 600 }}>● {s.key}</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{s.value.toLocaleString()}</span>
+              </div>
+            ))}
+            <div style={{ borderTop: '1px solid var(--line)', marginTop: 4, paddingTop: 4, display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+              <span style={{ color: 'var(--ink-3)' }}>Total</span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{total.toLocaleString()}</span>
             </div>
-          )
-        })}
+          </div>
+        )}
       </div>
       <div style={{
         width: 52, flexShrink: 0, textAlign: 'right',
@@ -149,7 +179,6 @@ function Dashboard({ activeLoc, locations, onNavigate }) {
   const [locData, setLocData] = useState([])
   const [hot, setHot] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [barTip, setBarTip] = useState(null)
 
   useEffect(() => {
     fetchData()
@@ -481,15 +510,6 @@ function Dashboard({ activeLoc, locations, onNavigate }) {
                   <div className="card-eyebrow">across cold storages</div>
                   <div className="card-title display">By location</div>
                 </div>
-                <div style={{
-                  fontSize: 12, fontFamily: 'var(--font-mono)', fontWeight: 600,
-                  color: 'var(--ink-2)', display: 'flex', alignItems: 'center', gap: 6,
-                  visibility: barTip ? 'visible' : 'hidden',
-                }}>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: barTip?.color, display: 'inline-block' }} />
-                  <span style={{ color: barTip?.color }}>{barTip?.key}</span>
-                  <span>· {barTip?.value?.toLocaleString()} bags</span>
-                </div>
               </div>
               <div className="card-bd">
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -500,7 +520,6 @@ function Dashboard({ activeLoc, locations, onNavigate }) {
                       segments={l.segments}
                       total={l.total}
                       max={maxLoc}
-                      onHover={setBarTip}
                     />
                   ))}
                 </div>
