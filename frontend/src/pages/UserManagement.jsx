@@ -127,7 +127,7 @@ function UserManagement() {
   }
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start' }}>
+    <div className="user-grid">
 
       {/* Create user */}
       <div style={card}>

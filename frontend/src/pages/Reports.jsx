@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { Icon } from '../App'
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
 import {
   Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Area, AreaChart,
   BarChart, Bar, CartesianGrid, Cell,
@@ -168,9 +170,12 @@ function Reports({ activeLoc, locations }) {
   const [rangeTo, setRangeTo] = useState(today)
   const [trendData, setTrendData] = useState([])
   const [gradeData, setGradeData] = useState([])
+  const [intakeGradeData, setIntakeGradeData] = useState([])
+  const [outflowGradeData, setOutflowGradeData] = useState([])
   const [dailyEvents, setDailyEvents] = useState([])
   const [totIn, setTotIn] = useState(0)
   const [totOut, setTotOut] = useState(0)
+  const [rawEntries, setRawEntries] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => { fetchReport() }, [activeLoc, range, rangeFrom, rangeTo])
@@ -203,24 +208,57 @@ function Reports({ activeLoc, locations }) {
 
     const [{ data: inShips }, { data: outShips }] = await Promise.all([inQ, outQ])
 
+    // Raw entries for CSV export
+    const allEntries = [
+      ...(inShips || []).flatMap(s =>
+        s.inbound_items.map(item => ({
+          date: s.date,
+          kind: 'in',
+          locId: s.cold_storage_id,
+          grade: item.grade,
+          bags: item.quantity,
+          unitWeight: item.unit_weight || 0,
+        }))
+      ),
+      ...(outShips || []).flatMap(s =>
+        s.outbound_items.map(item => ({
+          date: s.date,
+          kind: 'out',
+          locId: s.cold_storage_id,
+          grade: item.grade,
+          bags: item.quantity,
+          unitWeight: item.unit_weight || 0,
+        }))
+      ),
+    ].sort((a, b) => b.date.localeCompare(a.date))
+    setRawEntries(allEntries)
+
     // Totals
     const ti = (inShips || []).flatMap(s => s.inbound_items).reduce((s, i) => s + i.quantity, 0)
     const to = (outShips || []).flatMap(s => s.outbound_items).reduce((s, i) => s + i.quantity, 0)
     setTotIn(ti)
     setTotOut(to)
 
-    // Grade totals
-    const gmap = {}
+    // Grade totals — net, intake-only, outflow-only
+    const gmap = {}, inMap = {}, outMap = {}
     ;(inShips || []).flatMap(s => s.inbound_items).forEach(item => {
       gmap[item.grade] = (gmap[item.grade] || 0) + item.quantity
+      inMap[item.grade] = (inMap[item.grade] || 0) + item.quantity
     })
     ;(outShips || []).flatMap(s => s.outbound_items).forEach(item => {
       gmap[item.grade] = (gmap[item.grade] || 0) - item.quantity
+      outMap[item.grade] = (outMap[item.grade] || 0) + item.quantity
     })
     const grades = Object.entries(gmap)
       .filter(([, v]) => v > 0)
       .map(([name, value], i) => ({ name, value, color: gradeColor(name, i) }))
     setGradeData(grades)
+    setIntakeGradeData(
+      Object.entries(inMap).map(([name, value], i) => ({ name, value, color: gradeColor(name, i) }))
+    )
+    setOutflowGradeData(
+      Object.entries(outMap).map(([name, value], i) => ({ name, value, color: gradeColor(name, i) }))
+    )
 
     if (isDaily) {
       // Build flat timeline events sorted by created_at
@@ -270,6 +308,140 @@ function Reports({ activeLoc, locations }) {
   const totalStock = gradeData.reduce((s, g) => s + g.value, 0)
   const rangeLabel = range === 'Daily' ? 'today' : range === 'Range' ? `${rangeFrom} – ${rangeTo}` : range
 
+  function exportPDF() {
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' })
+    const W = doc.internal.pageSize.getWidth()
+
+    // Header band
+    doc.setFillColor(15, 23, 42)
+    doc.rect(0, 0, W, 22, 'F')
+    doc.setTextColor(255, 255, 255)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(13)
+    doc.text('PHStock', 14, 10)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(9)
+    doc.text('Period Report', 14, 16)
+    doc.text(today, W - 14, 16, { align: 'right' })
+
+    // Meta
+    doc.setTextColor(80, 80, 80)
+    doc.setFontSize(9)
+    const locLabel = activeLoc === 'all' ? 'All locations' : (locations.find(l => l.id === activeLoc)?.name || '')
+    doc.text(`Period: ${rangeLabel}`, 14, 30)
+    doc.text(`Location: ${locLabel}`, 14, 36)
+
+    // KPI summary table
+    doc.setTextColor(15, 23, 42)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(10)
+    doc.text('Summary', 14, 46)
+
+    autoTable(doc, {
+      startY: 50,
+      head: [['Total In', 'Total Out', 'Net Change']],
+      body: [[
+        totIn.toLocaleString() + ' bags',
+        totOut.toLocaleString() + ' bags',
+        (net >= 0 ? '+' : '−') + Math.abs(net).toLocaleString() + ' bags',
+      ]],
+      headStyles: { fillColor: [15, 23, 42], textColor: 255, fontStyle: 'bold', fontSize: 9 },
+      bodyStyles: { fontSize: 11, fontStyle: 'bold' },
+      columnStyles: { 0: { halign: 'center' }, 1: { halign: 'center' }, 2: { halign: 'center' } },
+      margin: { left: 14, right: 14 },
+    })
+
+    // Intake by grade
+    if (intakeGradeData.length > 0) {
+      const y1 = doc.lastAutoTable.finalY + 10
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(10)
+      doc.setTextColor(15, 23, 42)
+      doc.text('Intake by Grade', 14, y1)
+      autoTable(doc, {
+        startY: y1 + 4,
+        head: [['Grade', 'Bags In']],
+        body: intakeGradeData.map(g => [g.name, g.value.toLocaleString()]),
+        headStyles: { fillColor: [15, 23, 42], textColor: 255, fontStyle: 'bold', fontSize: 9 },
+        bodyStyles: { fontSize: 9 },
+        columnStyles: { 1: { halign: 'right' } },
+        alternateRowStyles: { fillColor: [245, 247, 250] },
+        margin: { left: 14, right: 14 },
+      })
+    }
+
+    // Outflow by grade
+    if (outflowGradeData.length > 0) {
+      const y2 = doc.lastAutoTable.finalY + 10
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(10)
+      doc.setTextColor(15, 23, 42)
+      doc.text('Outflow by Grade', 14, y2)
+      autoTable(doc, {
+        startY: y2 + 4,
+        head: [['Grade', 'Bags Out']],
+        body: outflowGradeData.map(g => [g.name, g.value.toLocaleString()]),
+        headStyles: { fillColor: [15, 23, 42], textColor: 255, fontStyle: 'bold', fontSize: 9 },
+        bodyStyles: { fontSize: 9 },
+        columnStyles: { 1: { halign: 'right' } },
+        alternateRowStyles: { fillColor: [245, 247, 250] },
+        margin: { left: 14, right: 14 },
+      })
+    }
+
+    // Net by grade
+    if (gradeData.length > 0) {
+      const y3 = doc.lastAutoTable.finalY + 10
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(10)
+      doc.setTextColor(15, 23, 42)
+      doc.text('Net Stock Change by Grade', 14, y3)
+      autoTable(doc, {
+        startY: y3 + 4,
+        head: [['Grade', 'Net Bags']],
+        body: gradeData.map(g => [g.name, g.value.toLocaleString()]),
+        headStyles: { fillColor: [15, 23, 42], textColor: 255, fontStyle: 'bold', fontSize: 9 },
+        bodyStyles: { fontSize: 9 },
+        columnStyles: { 1: { halign: 'right' } },
+        alternateRowStyles: { fillColor: [245, 247, 250] },
+        margin: { left: 14, right: 14 },
+      })
+    }
+
+    // Day-by-day trend (multi-day views)
+    if (trendData.length > 0) {
+      const y4 = doc.lastAutoTable.finalY + 10
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(10)
+      doc.setTextColor(15, 23, 42)
+      doc.text('Daily Breakdown', 14, y4)
+      autoTable(doc, {
+        startY: y4 + 4,
+        head: [['Date', 'Bags In', 'Bags Out', 'Net']],
+        body: trendData.map(d => [
+          d.date,
+          d.in.toLocaleString(),
+          d.out.toLocaleString(),
+          (d.in - d.out >= 0 ? '+' : '−') + Math.abs(d.in - d.out).toLocaleString(),
+        ]),
+        headStyles: { fillColor: [15, 23, 42], textColor: 255, fontStyle: 'bold', fontSize: 9 },
+        bodyStyles: { fontSize: 9 },
+        columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' } },
+        alternateRowStyles: { fillColor: [245, 247, 250] },
+        margin: { left: 14, right: 14 },
+      })
+    }
+
+    // Footer
+    const pageH = doc.internal.pageSize.getHeight()
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8)
+    doc.setTextColor(150, 150, 150)
+    doc.text(`Generated by PHStock · ${today}`, 14, pageH - 10)
+
+    doc.save(`phstock-report-${range.toLowerCase()}-${today}.pdf`)
+  }
+
   return (
     <div className="col">
       {/* Tabs + date pickers + export */}
@@ -306,7 +478,7 @@ function Reports({ activeLoc, locations }) {
         )}
 
         <div className="tb-spacer" />
-        <button type="button" className="btn"><Icon name="download" /> CSV</button>
+        <button type="button" className="btn" onClick={exportPDF} disabled={rawEntries.length === 0}><Icon name="download" /> PDF</button>
       </div>
 
       {/* KPIs */}
@@ -315,7 +487,7 @@ function Reports({ activeLoc, locations }) {
         <KPI label={`Total out · ${rangeLabel}`} value={totOut.toLocaleString()} unit="bags" delta="outflow" deltaLabel="in window" dir="down" />
         <KPI
           label="Net change"
-          value={(net >= 0 ? '+' : '') + net}
+          value={(net >= 0 ? '+' : '−') + Math.abs(net).toLocaleString()}
           unit="bags"
           delta={net >= 0 ? 'building' : 'depleting'}
           deltaLabel="stock"
@@ -398,8 +570,8 @@ function Reports({ activeLoc, locations }) {
         </div>
       )}
 
-      {/* Grade mix + bar chart */}
-      <div className="report-grid">
+      {/* Grade mix + intake + outflow breakdown */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 18 }}>
         <div className="card">
           <div className="card-hd">
             <div>
@@ -434,36 +606,47 @@ function Reports({ activeLoc, locations }) {
         <div className="card">
           <div className="card-hd">
             <div>
-              <div className="card-eyebrow">breakdown</div>
-              <div className="card-title display">By grade (bags)</div>
+              <div className="card-eyebrow">intake</div>
+              <div className="card-title display">Intake by grade</div>
             </div>
           </div>
           <div className="card-bd">
-            {gradeData.length === 0 ? (
-              <div className="hint">No data in this period.</div>
+            {intakeGradeData.length === 0 ? (
+              <div className="hint">No intake in this period.</div>
             ) : (
               <ResponsiveContainer width="100%" height={180}>
-                <BarChart data={gradeData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                <BarChart data={intakeGradeData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="2 4" stroke="var(--line)" vertical={false} />
-                  <XAxis
-                    dataKey="name"
-                    tick={{ fontSize: 10, fontFamily: 'var(--font-mono)', fill: 'var(--ink-3)' }}
-                    tickLine={false} axisLine={false}
-                  />
-                  <YAxis
-                    tick={{ fontSize: 10, fontFamily: 'var(--font-mono)', fill: 'var(--ink-3)' }}
-                    tickLine={false} axisLine={false} width={36}
-                  />
-                  <Tooltip
-                    formatter={(v) => [v + ' bags', 'Bags']}
-                    contentStyle={{
-                      background: 'var(--surface)', border: '1px solid var(--line-strong)',
-                      borderRadius: 'var(--radius-input)', fontSize: 12,
-                    }}
-                  />
-                  <Bar dataKey="value" name="Bags" radius={[4, 4, 0, 0]}>
-                    {gradeData.map((g, i) => <Cell key={i} fill={g.color} />)}
+                  <XAxis dataKey="name" tick={{ fontSize: 10, fontFamily: 'var(--font-mono)', fill: 'var(--ink-3)' }} tickLine={false} axisLine={false} />
+                  <YAxis tick={{ fontSize: 10, fontFamily: 'var(--font-mono)', fill: 'var(--ink-3)' }} tickLine={false} axisLine={false} width={36} />
+                  <Tooltip formatter={(v) => [v + ' bags', 'Intake']} contentStyle={{ background: 'var(--surface)', border: '1px solid var(--line-strong)', borderRadius: 'var(--radius-input)', fontSize: 12 }} />
+                  <Bar dataKey="value" name="Intake" radius={[4, 4, 0, 0]}>
+                    {intakeGradeData.map((g, i) => <Cell key={i} fill={g.color} />)}
                   </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-hd">
+            <div>
+              <div className="card-eyebrow">outflow</div>
+              <div className="card-title display">Outflow by grade</div>
+            </div>
+          </div>
+          <div className="card-bd">
+            {outflowGradeData.length === 0 ? (
+              <div className="hint">No outflow in this period.</div>
+            ) : (
+              <ResponsiveContainer width="100%" height={180}>
+                <BarChart data={outflowGradeData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="2 4" stroke="var(--line)" vertical={false} />
+                  <XAxis dataKey="name" tick={{ fontSize: 10, fontFamily: 'var(--font-mono)', fill: 'var(--ink-3)' }} tickLine={false} axisLine={false} />
+                  <YAxis tick={{ fontSize: 10, fontFamily: 'var(--font-mono)', fill: 'var(--ink-3)' }} tickLine={false} axisLine={false} width={36} />
+                  <Tooltip formatter={(v) => [v + ' bags', 'Outflow']} contentStyle={{ background: 'var(--surface)', border: '1px solid var(--line-strong)', borderRadius: 'var(--radius-input)', fontSize: 12 }} />
+                  <Bar dataKey="value" name="Outflow" radius={[4, 4, 0, 0]} fill="var(--warn)" />
                 </BarChart>
               </ResponsiveContainer>
             )}

@@ -250,7 +250,7 @@ function App() {
           <FilterBar locations={locations} activeLoc={activeLoc} setActiveLoc={setActiveLoc} />
         )}
         <div className="pagebody">
-          {page === 'dashboard' && isAdmin && <Dashboard activeLoc={activeLoc} locations={locations} />}
+          {page === 'dashboard' && isAdmin && <Dashboard activeLoc={activeLoc} locations={locations} onNavigate={navigateTo} />}
           {page === 'add'       && <AddEntry profile={profile} defaultLoc={activeLoc} locations={locations} onSaved={() => navigateTo(isAdmin ? 'dashboard' : 'add')} />}
           {page === 'history'   && isAdmin && <History activeLoc={activeLoc} locations={locations} searchQ={searchQ} profile={profile} />}
           {page === 'reports'   && isAdmin && <Reports activeLoc={activeLoc} locations={locations} />}

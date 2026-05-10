@@ -9,6 +9,17 @@ function gradeColor(name, i = 0) {
   return GRADE_COLORS[letter] || INDEX_COLORS[i % INDEX_COLORS.length]
 }
 
+const FILTER_LABEL = {
+  fontFamily: 'var(--font-mono)',
+  fontSize: 10,
+  textTransform: 'uppercase',
+  letterSpacing: '.10em',
+  color: 'var(--ink-3)',
+  fontWeight: 600,
+  marginBottom: 5,
+  display: 'block',
+}
+
 function ConfirmModal({ entry, locations, onConfirm, onCancel }) {
   const locName = locations.find(l => l.id === entry.locId)?.name || '—'
   const totalKg = entry.bags * (entry.unitWeight || 0)
@@ -72,20 +83,38 @@ function History({ activeLoc, locations, searchQ = '', profile }) {
   const [hoveredRow, setHoveredRow] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
 
+  // Filters
+  const [filterLoc, setFilterLoc] = useState('')
+  const [filterGrade, setFilterGrade] = useState('')
+  const [filterFrom, setFilterFrom] = useState('')
+  const [filterTo, setFilterTo] = useState('')
+  const [grades, setGrades] = useState([])
+
   useEffect(() => {
     fetchEntries()
   }, [activeLoc])
+
+  useEffect(() => {
+    supabase.from('grades').select('name').order('name').then(({ data }) => {
+      if (data?.length) setGrades(data.map(g => g.name))
+    })
+  }, [])
+
+  // If the grades table is empty, derive grade options from loaded entries
+  const gradeOptions = grades.length > 0
+    ? grades
+    : [...new Set(entries.map(e => e.grade))].sort()
 
   async function fetchEntries() {
     setLoading(true)
 
     let inQ = supabase
       .from('inbound_shipments')
-      .select('id, date, cold_storage_id, inbound_items(grade, quantity, unit_weight)')
+      .select('id, date, cold_storage_id, note_number, inbound_items(grade, quantity, unit_weight)')
       .order('date', { ascending: false })
     let outQ = supabase
       .from('outbound_shipments')
-      .select('id, date, cold_storage_id, outbound_items(grade, quantity, unit_weight)')
+      .select('id, date, cold_storage_id, note_number, outbound_items(grade, quantity, unit_weight)')
       .order('date', { ascending: false })
 
     if (activeLoc !== 'all') {
@@ -102,6 +131,7 @@ function History({ activeLoc, locations, searchQ = '', profile }) {
           shipmentId: s.id,
           date: s.date,
           locId: s.cold_storage_id,
+          noteNumber: s.note_number,
           grade: item.grade,
           bags: item.quantity,
           unitWeight: item.unit_weight,
@@ -114,6 +144,7 @@ function History({ activeLoc, locations, searchQ = '', profile }) {
           shipmentId: s.id,
           date: s.date,
           locId: s.cold_storage_id,
+          noteNumber: s.note_number,
           grade: item.grade,
           bags: item.quantity,
           unitWeight: item.unit_weight,
@@ -126,8 +157,21 @@ function History({ activeLoc, locations, searchQ = '', profile }) {
     setLoading(false)
   }
 
+  const isFiltered = filterLoc || filterGrade || filterFrom || filterTo
+
+  function clearFilters() {
+    setFilterLoc('')
+    setFilterGrade('')
+    setFilterFrom('')
+    setFilterTo('')
+  }
+
   const filtered = entries.filter(h => {
     if (kind !== 'all' && h.kind !== kind) return false
+    if (filterLoc && String(h.locId) !== String(filterLoc)) return false
+    if (filterGrade && h.grade !== filterGrade) return false
+    if (filterFrom && h.date < filterFrom) return false
+    if (filterTo && h.date > filterTo) return false
     if (searchQ) {
       const locName = locations.find(l => l.id === h.locId)?.name || ''
       const haystack = `${h.grade} ${locName} ${h.date} ${h.kind} ${h.bags}`.toLowerCase()
@@ -188,22 +232,134 @@ function History({ activeLoc, locations, searchQ = '', profile }) {
         </div>
       </div>
 
-      <div className="card" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <div className="card-hd" style={{ flexShrink: 0 }}>
-          <div>
-            <div className="card-title display">All movements</div>
+      {/* Filter bar */}
+      <div style={{
+        background: 'var(--surface)',
+        border: '1px solid var(--line)',
+        borderRadius: 'var(--radius-card)',
+        boxShadow: 'var(--shadow-1)',
+        padding: '16px 20px',
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: '16px 20px',
+        alignItems: 'flex-end',
+      }}>
+        {/* Location */}
+        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 150 }}>
+          <label style={FILTER_LABEL}>Location</label>
+          <select
+            value={filterLoc}
+            onChange={e => setFilterLoc(e.target.value)}
+            className="field-input"
+            style={{ fontSize: 13, padding: '7px 10px', minWidth: 150 }}
+          >
+            <option value="">All locations</option>
+            {locations.map(l => (
+              <option key={l.id} value={String(l.id)}>{l.name}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Grade pills */}
+        {gradeOptions.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <label style={FILTER_LABEL}>Grade</label>
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+              {['', ...gradeOptions].map(g => {
+                const isActive = filterGrade === g
+                const gc = gradeColor(g)
+                return (
+                  <button
+                    key={g || 'all'}
+                    type="button"
+                    className={'subtab' + (isActive ? ' is-on' : '')}
+                    onClick={() => setFilterGrade(g)}
+                    style={isActive ? (g
+                      ? { color: gc, background: `color-mix(in oklab, ${gc} 12%, var(--surface))`, borderColor: `color-mix(in oklab, ${gc} 35%, transparent)` }
+                      : { color: 'var(--ink)', background: 'var(--bg-2)', borderColor: 'var(--line-strong)' }
+                    ) : {}}
+                  >
+                    {g || 'All'}
+                  </button>
+                )
+              })}
+            </div>
           </div>
-          <div className="subtabs" style={{ padding: 0, border: 0, margin: 0 }}>
-            <button type="button" className={'subtab' + (kind === 'all' ? ' is-on' : '')} onClick={() => setKind('all')}
-              style={kind === 'all' ? { color: 'var(--ink)', background: 'var(--bg-2)', borderColor: 'var(--line-strong)' } : {}}>All</button>
-            <button type="button" className={'subtab' + (kind === 'in' ? ' is-on' : '')} onClick={() => setKind('in')}
-              style={kind === 'in' ? { color: 'var(--grade-a)', background: 'color-mix(in oklab, var(--grade-a) 10%, var(--surface))', borderColor: 'color-mix(in oklab, var(--grade-a) 30%, transparent)' } : {}}>In</button>
-            <button type="button" className={'subtab' + (kind === 'out' ? ' is-on' : '')} onClick={() => setKind('out')}
-              style={kind === 'out' ? { color: 'var(--warn)', background: 'color-mix(in oklab, var(--warn) 10%, var(--surface))', borderColor: 'color-mix(in oklab, var(--warn) 30%, transparent)' } : {}}>Out</button>
+        )}
+
+        {/* Date range */}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <label style={FILTER_LABEL}>From</label>
+            <input
+              type="date"
+              value={filterFrom}
+              onChange={e => setFilterFrom(e.target.value)}
+              className="field-input"
+              style={{ fontSize: 13, padding: '7px 10px' }}
+            />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <label style={FILTER_LABEL}>To</label>
+            <input
+              type="date"
+              value={filterTo}
+              onChange={e => setFilterTo(e.target.value)}
+              className="field-input"
+              style={{ fontSize: 13, padding: '7px 10px' }}
+            />
           </div>
         </div>
 
-        <div style={{ overflowY: 'auto', flex: 1 }}>
+        {/* Type */}
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <label style={FILTER_LABEL}>Type</label>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {[
+              { value: 'all', label: 'All' },
+              { value: 'in',  label: 'In' },
+              { value: 'out', label: 'Out' },
+            ].map(({ value, label }) => {
+              const isActive = kind === value
+              const activeStyle = value === 'in'
+                ? { color: 'var(--grade-a)', background: 'color-mix(in oklab, var(--grade-a) 12%, var(--surface))', borderColor: 'color-mix(in oklab, var(--grade-a) 35%, transparent)' }
+                : value === 'out'
+                  ? { color: 'var(--warn)', background: 'color-mix(in oklab, var(--warn) 12%, var(--surface))', borderColor: 'color-mix(in oklab, var(--warn) 35%, transparent)' }
+                  : { color: 'var(--ink)', background: 'var(--bg-2)', borderColor: 'var(--line-strong)' }
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  className={'subtab' + (isActive ? ' is-on' : '')}
+                  onClick={() => setKind(value)}
+                  style={isActive ? activeStyle : {}}
+                >
+                  {label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Clear */}
+        {(isFiltered || kind !== 'all') && (
+          <button
+            type="button"
+            className="btn"
+            onClick={() => { clearFilters(); setKind('all') }}
+            style={{ alignSelf: 'flex-end', fontSize: 13 }}
+          >
+            Clear filters
+          </button>
+        )}
+      </div>
+
+      <div className="card" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div className="card-hd" style={{ flexShrink: 0 }}>
+          <div className="card-title display">All movements</div>
+        </div>
+
+        <div style={{ overflow: 'auto', flex: 1 }}>
           {loading ? (
             <div style={{ padding: '32px 22px', color: 'var(--ink-3)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>Loading…</div>
           ) : (
@@ -211,6 +367,7 @@ function History({ activeLoc, locations, searchQ = '', profile }) {
               <thead style={{ position: 'sticky', top: 0, background: 'var(--surface-2)', zIndex: 1, boxShadow: '0 1px 0 var(--line)' }}>
                 <tr>
                   <th>Date</th>
+                  <th>Note Number</th>
                   <th>Storage</th>
                   <th>Grade</th>
                   <th style={{ textAlign: 'right' }}>Bags</th>
@@ -231,6 +388,7 @@ function History({ activeLoc, locations, searchQ = '', profile }) {
                       onMouseLeave={() => setHoveredRow(null)}
                     >
                       <td><span className="num" style={{ color: 'var(--ink)' }}>{h.date}</span></td>
+                      <td><span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-2)' }}>{h.noteNumber || '—'}</span></td>
                       <td><span className="loc">{locName}</span></td>
                       <td><span className="gradedot" style={{ color: gradeColor(h.grade) }}>{h.grade}</span></td>
                       <td className="num right">

@@ -17,6 +17,7 @@ function AddEntry({ profile, defaultLoc, locations, onSaved }) {
   const [bags, setBags] = useState('')
   const [bagW, setBagW] = useState('')
   const [date, setDate] = useState(() => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }))
+  const [noteNumber, setNoteNumber] = useState('')
   const [saved, setSaved] = useState(false)
   const [showToast, setShowToast] = useState(false)
   const [error, setError] = useState('')
@@ -112,6 +113,7 @@ function AddEntry({ profile, defaultLoc, locations, onSaved }) {
     if (submitting) return
     const errs = {}
     if (!kind) errs.kind = 'Select a movement type'
+    if (!noteNumber.trim()) errs.noteNumber = 'Enter a note number'
     if (!grade) errs.grade = 'Select a grade'
     if (!bags) errs.bags = 'Enter bag count'
     if (!bagW) errs.bagW = 'Enter bag weight'
@@ -130,7 +132,7 @@ function AddEntry({ profile, defaultLoc, locations, onSaved }) {
       if (kind === 'in') {
         const { data: shipment, error: se } = await supabase
           .from('inbound_shipments')
-          .insert([{ date, cold_storage_id: locId }])
+          .insert([{ date, cold_storage_id: locId, note_number: noteNumber.trim() }])
           .select('id')
           .single()
         if (se) throw new Error(se.message)
@@ -145,7 +147,7 @@ function AddEntry({ profile, defaultLoc, locations, onSaved }) {
       } else {
         const { data: shipment, error: se } = await supabase
           .from('outbound_shipments')
-          .insert([{ date, cold_storage_id: locId }])
+          .insert([{ date, cold_storage_id: locId, note_number: noteNumber.trim() }])
           .select('id')
           .single()
         if (se) throw new Error(se.message)
@@ -256,6 +258,19 @@ function AddEntry({ profile, defaultLoc, locations, onSaved }) {
               value={date}
               onChange={e => setDate(e.target.value)}
             />
+          </div>
+
+          {/* Note Number */}
+          <div className="field">
+            <div className="field-label">Note Number</div>
+            <input
+              type="text"
+              className="field-input"
+              value={noteNumber}
+              onChange={e => { setNoteNumber(e.target.value); setFieldErrors(f => ({ ...f, noteNumber: null })) }}
+              placeholder="e.g. INV-001"
+            />
+            <FieldError field="noteNumber" />
           </div>
 
           {/* Cold storage — pill buttons (admins only) */}

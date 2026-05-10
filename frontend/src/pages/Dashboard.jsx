@@ -1,6 +1,8 @@
 import { useEffect, useState, useMemo } from 'react'
 import { supabase } from '../supabaseClient'
 import { Icon } from '../App'
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
 
 const GRADE_COLORS = { A: 'var(--grade-a)', B: 'var(--grade-b)', C: 'var(--grade-c)', D: 'var(--grade-d)' }
 const INDEX_COLORS = ['var(--grade-a)', 'var(--grade-b)', 'var(--grade-c)', 'var(--grade-d)', 'var(--accent)', 'var(--ink-2)']
@@ -54,8 +56,8 @@ function Donut({ data, size = 260, thickness = 36, hot, onHot }) {
   return (
     <svg
       className={'donut' + (hot ? ' has-hover' : '')}
-      width={size} height={size}
       viewBox={`0 0 ${size} ${size}`}
+      style={{ width: '100%', aspectRatio: '1', maxWidth: size }}
     >
       {paths.map(p => (
         <path
@@ -92,7 +94,7 @@ function KPI({ label, value, unit, delta, deltaLabel, dir, spark, sparkColor }) 
 
 function LocBar({ label, segments, total, max, onHover }) {
   const active = segments.filter(s => s.value > 0)
-  const trackPct = (total / max) * 100
+  const trackPct = total > 0 && max > 0 ? (total / max) * 100 : 0
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
       <div style={{
@@ -141,7 +143,7 @@ function LocBar({ label, segments, total, max, onHover }) {
   )
 }
 
-function Dashboard({ activeLoc, locations }) {
+function Dashboard({ activeLoc, locations, onNavigate }) {
   const [stockByGrade, setStockByGrade] = useState([])
   const [recent, setRecent] = useState([])
   const [locData, setLocData] = useState([])
@@ -180,20 +182,32 @@ function Dashboard({ activeLoc, locations }) {
 
     // Per-location breakdown for all-locations view
     if (activeLoc === 'all') {
-      const locMap = {}
-      ;(inShips || []).flatMap(s => s.inbound_items.map(i => ({ ...i, loc: s.cold_storage_id }))).forEach(item => {
-        if (!locMap[item.loc]) locMap[item.loc] = {}
-        locMap[item.loc][item.grade] = (locMap[item.loc][item.grade] || 0) + item.quantity
+      // flat key avoids nested-object lookup bugs
+      const flat = {} // "locId|grade" -> net bags
+      const gradeNames = new Set()
+      ;(inShips || []).forEach(s => {
+        const lid = String(s.cold_storage_id)
+        s.inbound_items.forEach(item => {
+          gradeNames.add(item.grade)
+          const k = lid + '|' + item.grade
+          flat[k] = (flat[k] || 0) + item.quantity
+        })
       })
-      ;(outShips || []).flatMap(s => s.outbound_items.map(i => ({ ...i, loc: s.cold_storage_id }))).forEach(item => {
-        if (!locMap[item.loc]) locMap[item.loc] = {}
-        locMap[item.loc][item.grade] = (locMap[item.loc][item.grade] || 0) - item.quantity
+      ;(outShips || []).forEach(s => {
+        const lid = String(s.cold_storage_id)
+        s.outbound_items.forEach(item => {
+          gradeNames.add(item.grade)
+          const k = lid + '|' + item.grade
+          flat[k] = (flat[k] || 0) - item.quantity
+        })
       })
-      const allGradeNames = [...new Set(grades.map(g => g.name))]
+      const allGrades = [...gradeNames].sort()
       const ld = locations.map(l => {
-        const gmap = locMap[l.id] || {}
-        const segs = allGradeNames.map((gname, i) => ({
-          key: gname, value: Math.max(0, gmap[gname] || 0), color: gradeColor(gname, i),
+        const lid = String(l.id)
+        const segs = allGrades.map((gname, i) => ({
+          key: gname,
+          value: Math.max(0, flat[lid + '|' + gname] || 0),
+          color: gradeColor(gname, i),
         }))
         const total = segs.reduce((s, g) => s + g.value, 0)
         return { id: l.id, label: l.name, segments: segs, total }
@@ -252,6 +266,89 @@ function Dashboard({ activeLoc, locations }) {
   const aGrade = stockByGrade.find(g => /^a/i.test(g.name))
   const aPct = positiveTotal > 0 && aGrade ? Math.round((aGrade.value / positiveTotal) * 100) : 0
 
+  function exportPDF() {
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' })
+    const W = doc.internal.pageSize.getWidth()
+
+    // Header band
+    doc.setFillColor(15, 23, 42)
+    doc.rect(0, 0, W, 22, 'F')
+    doc.setTextColor(255, 255, 255)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(13)
+    doc.text('PHStock', 14, 10)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(9)
+    doc.text('Current Stock Snapshot', 14, 16)
+    doc.text(today, W - 14, 16, { align: 'right' })
+
+    // Meta row
+    doc.setTextColor(80, 80, 80)
+    doc.setFontSize(9)
+    doc.text(`Location: ${locName}`, 14, 30)
+    doc.text(`Total stock: ${positiveTotal.toLocaleString()} bags`, 14, 36)
+
+    // Grade breakdown table
+    doc.setTextColor(15, 23, 42)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(10)
+    doc.text('Stock by Grade', 14, 46)
+
+    autoTable(doc, {
+      startY: 50,
+      head: [['Grade', 'Bags', 'Share']],
+      body: [
+        ...stockByGrade.map(g => {
+          const pct = positiveTotal > 0 && g.value > 0 ? Math.round((g.value / positiveTotal) * 100) : 0
+          return [g.name, g.value.toLocaleString(), g.value > 0 ? `${pct}%` : '—']
+        }),
+        ['Total', positiveTotal.toLocaleString(), '100%'],
+      ],
+      headStyles: { fillColor: [15, 23, 42], textColor: 255, fontStyle: 'bold', fontSize: 9 },
+      bodyStyles: { fontSize: 9 },
+      columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' } },
+      alternateRowStyles: { fillColor: [245, 247, 250] },
+      foot: [],
+      didParseCell(data) {
+        if (data.section === 'body' && data.row.index === stockByGrade.length) {
+          data.cell.styles.fontStyle = 'bold'
+          data.cell.styles.fillColor = [226, 232, 240]
+        }
+      },
+      margin: { left: 14, right: 14 },
+    })
+
+    // Location breakdown (all-locations view only)
+    if (activeLoc === 'all' && locData.length > 0) {
+      const afterGrade = doc.lastAutoTable.finalY + 10
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(10)
+      doc.setTextColor(15, 23, 42)
+      doc.text('Stock by Location', 14, afterGrade)
+
+      autoTable(doc, {
+        startY: afterGrade + 4,
+        head: [['Location', 'Bags']],
+        body: locData.map(l => [l.label, l.total.toLocaleString()]),
+        headStyles: { fillColor: [15, 23, 42], textColor: 255, fontStyle: 'bold', fontSize: 9 },
+        bodyStyles: { fontSize: 9 },
+        columnStyles: { 1: { halign: 'right' } },
+        alternateRowStyles: { fillColor: [245, 247, 250] },
+        margin: { left: 14, right: 14 },
+      })
+    }
+
+    // Footer
+    const pageH = doc.internal.pageSize.getHeight()
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8)
+    doc.setTextColor(150, 150, 150)
+    doc.text(`Generated by PHStock · ${today}`, 14, pageH - 10)
+
+    doc.save(`phstock-stock-${today}.pdf`)
+  }
+
   if (loading) {
     return (
       <div style={{ padding: '48px 0', color: 'var(--ink-3)', fontFamily: 'var(--font-mono)', fontSize: 13 }}>
@@ -292,7 +389,7 @@ function Dashboard({ activeLoc, locations }) {
         />
         <KPI
           label="Locations"
-          value={(activeLoc === 'all' ? locData.length : 1).toString()}
+          value={(activeLoc === 'all' ? locations.length : 1).toString()}
           unit={activeLoc === 'all' ? 'sites' : 'site'}
           delta="tracked"
           deltaLabel="cold storages"
@@ -309,13 +406,13 @@ function Dashboard({ activeLoc, locations }) {
                 <div className="card-eyebrow">{locName} · current stock</div>
                 <div className="card-title display">Stock by grade</div>
               </div>
-              <button className="btn" type="button">
-                <Icon name="download" /> Export
+              <button className="btn" type="button" onClick={exportPDF} disabled={stockByGrade.length === 0}>
+                <Icon name="download" /> PDF
               </button>
             </div>
             <div className="card-bd">
-              <div className="row" style={{ alignItems: 'center', justifyContent: 'space-between', gap: 24 }}>
-                <div className="donut-wrap" style={{ flex: '0 0 auto' }}>
+              <div className="row" style={{ alignItems: 'center', justifyContent: 'space-between', gap: 24, flexWrap: 'wrap' }}>
+                <div className="donut-wrap" style={{ flex: '0 1 240px', minWidth: 0 }}>
                   <Donut data={positiveData} size={240} thickness={32} hot={hot} onHot={setHot} />
                   <div className="donut-center">
                     <div style={{ textAlign: 'center' }}>
@@ -335,7 +432,7 @@ function Dashboard({ activeLoc, locations }) {
                     </div>
                   </div>
                 </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ flex: 1, minWidth: 180 }}>
                   <div className="gradetable">
                     {stockByGrade.map((g) => {
                       const isNeg = g.value < 0
@@ -377,7 +474,7 @@ function Dashboard({ activeLoc, locations }) {
             </div>
           </div>
 
-          {activeLoc === 'all' && locData.length > 0 && (
+          {activeLoc === 'all' && (
             <div className="card">
               <div className="card-hd">
                 <div>
@@ -426,7 +523,7 @@ function Dashboard({ activeLoc, locations }) {
             <div className="card-eyebrow">last 5 movements</div>
             <div className="card-title display">Recent activity</div>
           </div>
-          <button className="btn" type="button">View all</button>
+          <button className="btn" type="button" onClick={() => onNavigate?.('history')}>View all</button>
         </div>
         <div className="card-bd tight">
           {recent.length === 0 && (
