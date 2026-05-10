@@ -1,0 +1,12 @@
+# Environment files
+frontend/.env
+frontend/.env.local
+backend/.env
+
+# Dependencies
+frontend/node_modules
+backend/venv
+backend/__pycache__
+
+# Build
+frontend/dist
