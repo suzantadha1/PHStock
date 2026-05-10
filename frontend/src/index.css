@@ -837,3 +837,27 @@ body {
   .date-range-row input[type="date"] { width: 100%; }
   .filter-date-type { flex-direction: column; gap: 12px; }
 }
+
+@media (max-width: 768px) {
+  .filter-date-type {
+    width: 100%;
+    order: 2;
+  }
+  .filter-date-type .date-range-row {
+    flex-direction: column;
+    width: 100%;
+  }
+  .filter-date-type .date-range-row > div {
+    width: 100%;
+  }
+  .filter-date-type .date-range-row input {
+    width: 100%;
+  }
+  .filter-date-type > div {
+    width: 100%;
+  }
+  .filter-date-type > div > div {
+    display: flex;
+    gap: 4px;
+  }
+}
