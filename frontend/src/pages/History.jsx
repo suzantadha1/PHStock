@@ -108,7 +108,7 @@ function EditModal({ entry, locations, grades, onSave, onCancel }) {
         <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
 
           {/* Row 1: Date + Note */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
             <div className="field">
               <div className="field-label">Date</div>
               <input type="date" className="field-input" value={date} onChange={e => setDate(e.target.value)} />
