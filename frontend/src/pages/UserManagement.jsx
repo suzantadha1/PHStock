@@ -91,7 +91,7 @@ function UserManagement() {
     setError('')
     setSuccess('')
     try {
-      const res = await fetch('http://localhost:8000/users/create', {
+      const res = await fetch('https://phstock-backend.onrender.com/users/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -115,7 +115,7 @@ function UserManagement() {
   async function handleDelete(userId, username) {
     if (!confirm(`Delete user "${username}"?`)) return
     try {
-      await fetch('http://localhost:8000/users/delete', {
+      await fetch('https://phstock-backend.onrender.com/users/delete', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: userId })
