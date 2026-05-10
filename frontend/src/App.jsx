@@ -33,6 +33,24 @@ export function Icon({ name, size = 16 }) {
   return <svg className="icn" width={s} height={s} viewBox="0 0 24 24">{paths[name]}</svg>
 }
 
+function MobNav({ page, setPage, items }) {
+  return (
+    <nav className="mob-nav">
+      {items.map(it => (
+        <button
+          key={it.id}
+          type="button"
+          className={'mob-nav-item' + (page === it.id ? ' is-active' : '')}
+          onClick={() => setPage(it.id)}
+        >
+          <Icon name={it.icon} size={22} />
+          <span>{it.name}</span>
+        </button>
+      ))}
+    </nav>
+  )
+}
+
 function Sidebar({ page, setPage, onSignOut, items, profile }) {
   const initials = profile?.full_name
     ? profile.full_name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
@@ -239,6 +257,7 @@ function App() {
           {page === 'users'     && isAdmin && <UserManagement />}
         </div>
       </main>
+      <MobNav page={page} setPage={navigateTo} items={navItems} />
     </div>
   )
 }

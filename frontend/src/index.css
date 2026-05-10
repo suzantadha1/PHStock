@@ -695,3 +695,86 @@ body {
 .grade-b { color: var(--grade-b); }
 .grade-c { color: var(--grade-c); }
 .grade-d { color: var(--grade-d); }
+
+/* ───── MOBILE BOTTOM NAV (hidden on desktop) ──────────────── */
+.mob-nav { display: none; }
+
+/* ───── MOBILE ─────────────────────────────────────────────── */
+@media (max-width: 767px) {
+  .app {
+    grid-template-columns: 1fr;
+  }
+  .sb {
+    display: none;
+  }
+
+  /* Bottom nav */
+  .mob-nav {
+    display: flex;
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    background: var(--surface);
+    border-top: 1px solid var(--line);
+    padding: 6px 0 env(safe-area-inset-bottom, 6px);
+    z-index: 200;
+    justify-content: space-around;
+  }
+  .mob-nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    padding: 6px 10px;
+    border-radius: var(--r-md);
+    color: var(--ink-3);
+    font-size: 9px;
+    font-weight: 600;
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    cursor: pointer;
+    background: none;
+    border: none;
+    transition: color .15s var(--easing);
+    min-width: 52px;
+  }
+  .mob-nav-item.is-active {
+    color: var(--primary);
+  }
+
+  /* Top bar */
+  .topbar {
+    padding: 12px 16px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .tb-eyebrow { display: none; }
+  .tb-title { font-size: 22px; }
+  .tb-search { width: 100%; order: 3; flex: 0 0 100%; }
+  .tb-spacer { display: none; }
+
+  /* Filter bar */
+  .filterbar { padding: 10px 16px; gap: 8px; }
+
+  /* Page body — extra bottom padding to clear the fixed nav */
+  .pagebody { padding: 16px 14px 90px; }
+
+  /* Grids → single column */
+  .grid-2,
+  .grid-3,
+  .grid-4,
+  .grid-dash { grid-template-columns: 1fr; }
+
+  /* Form grid → single column */
+  .form-grid { grid-template-columns: 1fr; }
+
+  /* Grade & location pickers → 2 columns */
+  .gradepicker { grid-template-columns: repeat(2, 1fr); }
+  .locpicker   { grid-template-columns: repeat(2, 1fr); }
+
+  /* KPI value font */
+  .kpi-val { font-size: 32px; }
+
+  /* Donut chart — shrink a bit */
+  .donut-center .val { font-size: 32px; }
+}
