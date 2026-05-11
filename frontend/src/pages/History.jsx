@@ -26,9 +26,12 @@ function buildRegister(entries) {
     const lk = String(e.locId)
     if (!byLocGrade[lk]) byLocGrade[lk] = {}
     if (!byLocGrade[lk][e.grade]) byLocGrade[lk][e.grade] = {}
-    if (!byLocGrade[lk][e.grade][e.date]) byLocGrade[lk][e.grade][e.date] = { in: 0, out: 0 }
+    if (!byLocGrade[lk][e.grade][e.date]) byLocGrade[lk][e.grade][e.date] = { in: 0, out: 0, remarks: [], noteNumbers: [], maxShipmentId: 0 }
     if (e.kind === 'in') byLocGrade[lk][e.grade][e.date].in += e.bags
     else byLocGrade[lk][e.grade][e.date].out += e.bags
+    if (e.remarks) byLocGrade[lk][e.grade][e.date].remarks.push(e.remarks)
+    if (e.noteNumber) byLocGrade[lk][e.grade][e.date].noteNumbers.push(String(e.noteNumber))
+    if (e.shipmentId > byLocGrade[lk][e.grade][e.date].maxShipmentId) byLocGrade[lk][e.grade][e.date].maxShipmentId = e.shipmentId
   }
   const rows = []
   for (const [locId, gradeMap] of Object.entries(byLocGrade)) {
@@ -41,7 +44,10 @@ function buildRegister(entries) {
         const sold = dateMap[date].out
         const total = opening + newStock
         closing = total - sold
-        rows.push({ date, locId, grade, opening, newStock, total, sold, closing })
+        const remarks = [...new Set(dateMap[date].remarks)].join(', ')
+        const noteNumbers = [...new Set(dateMap[date].noteNumbers)].join(', ')
+        const maxShipmentId = dateMap[date].maxShipmentId
+        rows.push({ date, locId, grade, opening, newStock, total, sold, closing, remarks, noteNumbers, maxShipmentId })
       }
     }
   }
@@ -57,7 +63,7 @@ function Pagination({ page, total, count, onPrev, onNext }) {
       background: 'var(--surface-2)',
     }}>
       <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-3)', letterSpacing: '.06em' }}>
-        {((page - 1) * 50) + 1}–{Math.min(page * 50, count)} of {count}
+        {((page - 1) * 10) + 1}–{Math.min(page * 10, count)} of {count}
       </span>
       <div style={{ display: 'flex', gap: 6 }}>
         <button className="btn" onClick={onPrev} disabled={page === 1} style={{ padding: '4px 12px', fontSize: 13 }}>← Prev</button>
@@ -136,7 +142,7 @@ function EditModal({ entry, locations, grades, onSave, onCancel }) {
               <input type="date" className="field-input" value={date} onChange={e => setDate(e.target.value)} style={{ minWidth: 0 }} />
             </div>
             <div className="field">
-              <div className="field-label">Note number</div>
+              <div className="field-label">Reference number</div>
               <input type="number" className="field-input" value={noteNumber} onChange={e => setNoteNumber(e.target.value)} min="0" placeholder="—" />
             </div>
           </div>
@@ -258,7 +264,7 @@ function History({ activeLoc, locations, searchQ = '', profile }) {
   const [loading, setLoading] = useState(true)
   const [hoveredRow, setHoveredRow] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
-  const [view, setView] = useState('movements')
+  const [view, setView] = useState('register')
   const [editTarget, setEditTarget] = useState(null)
 
   // Filters
@@ -268,7 +274,7 @@ function History({ activeLoc, locations, searchQ = '', profile }) {
   const [grades, setGrades] = useState([])
 
   // Pagination
-  const PAGE_SIZE = 50
+  const PAGE_SIZE = 10
   const [movPage, setMovPage] = useState(1)
   const [regPage, setRegPage] = useState(1)
 
@@ -295,11 +301,11 @@ function History({ activeLoc, locations, searchQ = '', profile }) {
 
     let inQ = supabase
       .from('inbound_shipments')
-      .select('id, date, cold_storage_id, note_number, inbound_items(id, grade, quantity, unit_weight)')
+      .select('id, date, cold_storage_id, note_number, remarks, inbound_items(id, grade, quantity, unit_weight)')
       .order('date', { ascending: false }).order('id', { ascending: false })
     let outQ = supabase
       .from('outbound_shipments')
-      .select('id, date, cold_storage_id, note_number, outbound_items(id, grade, quantity, unit_weight)')
+      .select('id, date, cold_storage_id, note_number, remarks, outbound_items(id, grade, quantity, unit_weight)')
       .order('date', { ascending: false }).order('id', { ascending: false })
 
     if (activeLoc !== 'all') {
@@ -318,6 +324,7 @@ function History({ activeLoc, locations, searchQ = '', profile }) {
           date: s.date,
           locId: s.cold_storage_id,
           noteNumber: s.note_number,
+          remarks: s.remarks || '',
           grade: item.grade,
           bags: item.quantity,
           unitWeight: item.unit_weight,
@@ -332,6 +339,7 @@ function History({ activeLoc, locations, searchQ = '', profile }) {
           date: s.date,
           locId: s.cold_storage_id,
           noteNumber: s.note_number,
+          remarks: s.remarks || '',
           grade: item.grade,
           bags: item.quantity,
           unitWeight: item.unit_weight,
@@ -359,7 +367,7 @@ function History({ activeLoc, locations, searchQ = '', profile }) {
     if (filterTo && h.date > filterTo) return false
     if (searchQ) {
       const locName = locations.find(l => l.id === h.locId)?.name || ''
-      const haystack = `${h.grade} ${locName} ${h.date} ${h.kind} ${h.bags}`.toLowerCase()
+      const haystack = `${h.grade} ${locName} ${h.date} ${h.kind} ${h.bags} ${h.noteNumber || ''}`.toLowerCase()
       if (!haystack.includes(searchQ.toLowerCase())) return false
     }
     return true
@@ -438,16 +446,13 @@ function History({ activeLoc, locations, searchQ = '', profile }) {
       if (filterTo && r.date > filterTo) return false
       if (searchQ) {
         const locName = locations.find(l => String(l.id) === String(r.locId))?.name || ''
-        const haystack = `${r.grade} ${locName} ${r.date}`.toLowerCase()
+        const haystack = `${r.grade} ${locName} ${r.date} ${r.noteNumbers}`.toLowerCase()
         if (!haystack.includes(searchQ.toLowerCase())) return false
       }
       return true
     }).sort((a, b) => {
       if (b.date !== a.date) return b.date.localeCompare(a.date)
-      const locA = locations.find(l => String(l.id) === String(a.locId))?.name || ''
-      const locB = locations.find(l => String(l.id) === String(b.locId))?.name || ''
-      if (locA !== locB) return locA.localeCompare(locB)
-      return a.grade.localeCompare(b.grade)
+      return b.maxShipmentId - a.maxShipmentId
     })
   }, [entries, filterGrade, filterFrom, filterTo, searchQ, locations])
 
@@ -465,8 +470,8 @@ function History({ activeLoc, locations, searchQ = '', profile }) {
       {/* View toggle */}
       <div style={{ display: 'flex', gap: 4 }}>
         {[
-          { value: 'movements', label: 'Movements' },
           { value: 'register', label: 'Register' },
+          { value: 'movements', label: 'Movements' },
         ].map(({ value, label }) => (
           <button
             key={value}
@@ -649,7 +654,7 @@ function History({ activeLoc, locations, searchQ = '', profile }) {
                 <thead style={{ position: 'sticky', top: 0, background: 'var(--surface-2)', zIndex: 1, boxShadow: '0 1px 0 var(--line)' }}>
                   <tr>
                     <th>Date</th>
-                    <th>Note Number</th>
+                    <th>Ref. No.</th>
                     <th>Storage</th>
                     <th>Grade</th>
                     <th style={{ textAlign: 'right' }}>Bags</th>
@@ -746,11 +751,13 @@ function History({ activeLoc, locations, searchQ = '', profile }) {
                     <th>Date</th>
                     <th>Location</th>
                     <th>Grade</th>
+                    <th>Ref. No.</th>
                     <th style={{ textAlign: 'right' }}>Opening</th>
                     <th style={{ textAlign: 'right' }}>New Stock</th>
                     <th style={{ textAlign: 'right' }}>Total</th>
                     <th style={{ textAlign: 'right' }}>Sold</th>
                     <th style={{ textAlign: 'right' }}>Closing</th>
+                    <th>Remarks</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -761,6 +768,7 @@ function History({ activeLoc, locations, searchQ = '', profile }) {
                         <td><span className="num" style={{ color: 'var(--ink)' }}>{r.date}</span></td>
                         <td><span className="loc">{locName}</span></td>
                         <td><span className="gradedot" style={{ color: gradeColor(r.grade) }}>{r.grade}</span></td>
+                        <td style={{ color: 'var(--ink-2)', fontSize: 13 }}>{r.noteNumbers || <span style={{ color: 'var(--ink-3)' }}>—</span>}</td>
                         <td className="num right" style={{ color: 'var(--ink-2)' }}>{r.opening.toLocaleString()}</td>
                         <td className="num right">
                           {r.newStock > 0
@@ -776,6 +784,7 @@ function History({ activeLoc, locations, searchQ = '', profile }) {
                         <td className="num right" style={{ fontWeight: 700, color: r.closing < 0 ? 'var(--warn)' : 'var(--ink)' }}>
                           {r.closing.toLocaleString()}
                         </td>
+                        <td style={{ color: 'var(--ink-2)', fontSize: 13 }}>{r.remarks || <span style={{ color: 'var(--ink-3)' }}>—</span>}</td>
                       </tr>
                     )
                   })}

@@ -170,7 +170,7 @@ const WORKER_NAV = [
 ]
 
 function App() {
-  const [page, setPage] = useState('dashboard')
+  const [page, setPage] = useState(() => localStorage.getItem('phstock_page') || 'dashboard')
   const [activeLoc, setActiveLoc] = useState('all')
   const [locations, setLocations] = useState([])
   const [searchQ, setSearchQ] = useState('')
@@ -218,6 +218,7 @@ function App() {
   function navigateTo(p) {
     setPage(p)
     setSearchQ('')
+    localStorage.setItem('phstock_page', p)
   }
 
   const isAdmin = profile?.role === 'admin'

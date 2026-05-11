@@ -18,6 +18,7 @@ function AddEntry({ profile, defaultLoc, locations, onSaved }) {
   const [bagW, setBagW] = useState('')
   const [date, setDate] = useState(() => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }))
   const [noteNumber, setNoteNumber] = useState('')
+  const [remarks, setRemarks] = useState('')
   const [saved, setSaved] = useState(false)
   const [showToast, setShowToast] = useState(false)
   const [error, setError] = useState('')
@@ -109,7 +110,7 @@ function AddEntry({ profile, defaultLoc, locations, onSaved }) {
     if (submitting) return
     const errs = {}
     if (!kind) errs.kind = 'Select a movement type'
-    if (!noteNumber.trim()) errs.noteNumber = 'Enter a note number'
+    if (!noteNumber.trim()) errs.noteNumber = 'Enter a reference number'
     if (!grade) errs.grade = 'Select a grade'
     if (!bags) errs.bags = 'Enter bag count'
     if (!bagW) errs.bagW = 'Enter bag weight'
@@ -128,7 +129,7 @@ function AddEntry({ profile, defaultLoc, locations, onSaved }) {
       if (kind === 'in') {
         const { data: shipment, error: se } = await supabase
           .from('inbound_shipments')
-          .insert([{ date, cold_storage_id: locId, note_number: noteNumber.trim() }])
+          .insert([{ date, cold_storage_id: locId, note_number: noteNumber.trim(), remarks: remarks.trim() || null }])
           .select('id')
           .single()
         if (se) throw new Error(se.message)
@@ -143,7 +144,7 @@ function AddEntry({ profile, defaultLoc, locations, onSaved }) {
       } else {
         const { data: shipment, error: se } = await supabase
           .from('outbound_shipments')
-          .insert([{ date, cold_storage_id: locId, note_number: noteNumber.trim() }])
+          .insert([{ date, cold_storage_id: locId, note_number: noteNumber.trim(), remarks: remarks.trim() || null }])
           .select('id')
           .single()
         if (se) throw new Error(se.message)
@@ -256,9 +257,9 @@ function AddEntry({ profile, defaultLoc, locations, onSaved }) {
             />
           </div>
 
-          {/* Note Number */}
+          {/* Reference Number */}
           <div className="field">
-            <div className="field-label">Note Number</div>
+            <div className="field-label">Reference Number</div>
             <input
               type="number"
               className="field-input field-num"
@@ -439,6 +440,29 @@ function AddEntry({ profile, defaultLoc, locations, onSaved }) {
               onChange={e => { setBagW(Math.max(0, +e.target.value || 0)); setFieldErrors(f => ({ ...f, bagW: null })) }}
             />
             <FieldError field="bagW" />
+          </div>
+
+          {/* Remarks */}
+          <div>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--ink-2)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '.08em' }}>Remarks</label>
+            <textarea
+              value={remarks}
+              onChange={e => setRemarks(e.target.value)}
+              placeholder="Optional notes…"
+              rows={3}
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                border: '1px solid var(--line)',
+                borderRadius: 'var(--radius-input)',
+                background: 'var(--surface-2)',
+                color: 'var(--ink)',
+                fontSize: 14,
+                fontFamily: 'inherit',
+                resize: 'vertical',
+                boxSizing: 'border-box',
+              }}
+            />
           </div>
 
           {/* Summary strip */}
