@@ -171,4 +171,4 @@ Usernames are used instead of emails. Internally stored as `username@phstock.loc
 
 ## Built by
 
-Suzan — CS 141, University of Illinois Chicago
+Suzan Tadha — BS Computer Science, University of Illinois Chicago
