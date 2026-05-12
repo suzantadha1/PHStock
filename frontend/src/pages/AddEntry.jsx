@@ -83,12 +83,22 @@ function AddEntry({ profile, defaultLoc, locations, onSaved }) {
     const remaining = snapshot.filter(l => l.id !== id)
     setLocalLocations(remaining)
     if (locId === id) setLocId(remaining[0]?.id ?? null)
+
+    // Delete any profiles assigned to this location first
+    const { error: profErr } = await supabase.from('profiles').delete().eq('location_id', id)
+    if (profErr) {
+      setLocalLocations(snapshot)
+      if (locId === id) setLocId(id)
+      alert('Could not delete worker: ' + profErr.message)
+      return
+    }
+
     const { error: err, count } = await supabase
       .from('locations').delete({ count: 'exact' }).eq('id', id)
     if (err || count === 0) {
       setLocalLocations(snapshot)
       if (locId === id) setLocId(id)
-      setError(err ? err.message : 'Delete blocked — add a DELETE policy for the locations table in Supabase RLS settings.')
+      alert('Could not delete location: ' + (err?.message || 'Delete blocked — check DELETE policy on locations table in Supabase.'))
     }
   }
 
@@ -102,7 +112,7 @@ function AddEntry({ profile, defaultLoc, locations, onSaved }) {
     if (err || count === 0) {
       setGrades(snapshot)
       if (grade === id) setGrade(id)
-      setError(err ? err.message : 'Delete blocked — add a DELETE policy for the grades table in Supabase RLS settings.')
+      alert(err ? err.message : 'Delete blocked — go to Supabase → Authentication → Policies and add a DELETE policy for the grades table.')
     }
   }
 
