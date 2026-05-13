@@ -1,4 +1,7 @@
 import { useEffect, useState } from 'react'
+
+const fmt = d => d ? d.split('-').reverse().join('/') : '—'
+const toISO = d => { if (!d) return ''; const p = d.split('/'); return p.length === 3 && p[2].length === 4 ? `${p[2]}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}` : '' }
 import { supabase } from '../supabaseClient'
 import { Icon } from '../App'
 import jsPDF from 'jspdf'
@@ -306,7 +309,7 @@ function Reports({ activeLoc, locations }) {
 
   const net = totIn - totOut
   const totalStock = gradeData.reduce((s, g) => s + g.value, 0)
-  const rangeLabel = range === 'Daily' ? 'today' : range === 'Range' ? `${rangeFrom} – ${rangeTo}` : range
+  const rangeLabel = range === 'Daily' ? 'today' : range === 'Range' ? `${fmt(rangeFrom)} – ${fmt(rangeTo)}` : range
 
   function exportPDF() {
     const doc = new jsPDF({ unit: 'mm', format: 'a4' })
@@ -419,7 +422,7 @@ function Reports({ activeLoc, locations }) {
         startY: y4 + 4,
         head: [['Date', 'Bags In', 'Bags Out', 'Net']],
         body: trendData.map(d => [
-          d.date,
+          fmt(d.date),
           d.in.toLocaleString(),
           d.out.toLocaleString(),
           (d.in - d.out >= 0 ? '+' : '−') + Math.abs(d.in - d.out).toLocaleString(),
@@ -457,22 +460,21 @@ function Reports({ activeLoc, locations }) {
         {range === 'Range' && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <input
-              type="date"
-              value={rangeFrom}
-              max={rangeTo}
-              onChange={e => setRangeFrom(e.target.value)}
+              type="text"
+              value={fmt(rangeFrom)}
+              placeholder="DD/MM/YYYY"
+              onChange={e => { const iso = toISO(e.target.value); if (iso) setRangeFrom(iso) }}
               className="field-input"
-              style={{ padding: '7px 12px', fontSize: 13, width: 148 }}
+              style={{ padding: '7px 12px', fontSize: 13, width: 120 }}
             />
             <span style={{ color: 'var(--ink-3)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>to</span>
             <input
-              type="date"
-              value={rangeTo}
-              min={rangeFrom}
-              max={today}
-              onChange={e => setRangeTo(e.target.value)}
+              type="text"
+              value={fmt(rangeTo)}
+              placeholder="DD/MM/YYYY"
+              onChange={e => { const iso = toISO(e.target.value); if (iso) setRangeTo(iso) }}
               className="field-input"
-              style={{ padding: '7px 12px', fontSize: 13, width: 148 }}
+              style={{ padding: '7px 12px', fontSize: 13, width: 120 }}
             />
           </div>
         )}
@@ -546,7 +548,7 @@ function Reports({ activeLoc, locations }) {
                     dataKey="date"
                     tick={{ fontSize: 10, fontFamily: 'var(--font-mono)', fill: 'var(--ink-3)' }}
                     tickLine={false} axisLine={false}
-                    tickFormatter={d => d.slice(5)}
+                    tickFormatter={d => `${d.slice(8)}/${d.slice(5, 7)}`}
                   />
                   <YAxis
                     tick={{ fontSize: 10, fontFamily: 'var(--font-mono)', fill: 'var(--ink-3)' }}

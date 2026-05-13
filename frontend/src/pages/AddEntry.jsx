@@ -170,6 +170,15 @@ function AddEntry({ profile, defaultLoc, locations, onSaved }) {
 
       setSaved(true)
       setShowToast(true)
+      setKind(null)
+      setDate(new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }))
+      setNoteNumber('')
+      setLocId(null)
+      setGrade(null)
+      setBags('')
+      setBagW('')
+      setRemarks('')
+      setFieldErrors({})
       setTimeout(() => { setSaved(false); if (onSaved) onSaved() }, 3000)
     } catch (err) {
       setError(err.message)

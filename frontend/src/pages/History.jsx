@@ -20,6 +20,9 @@ const FILTER_LABEL = {
   display: 'block',
 }
 
+const fmt = d => d ? d.split('-').reverse().join('/') : '—'
+const toISO = d => { if (!d) return ''; const p = d.split('/'); return p.length === 3 ? `${p[2]}-${p[1]}-${p[0]}` : '' }
+
 function buildRegister(entries) {
   const byLocGrade = {}
   for (const e of entries) {
@@ -127,7 +130,7 @@ function EditModal({ entry, locations, grades, onSave, onCancel }) {
               {entry.kind === 'in' ? 'Intake' : 'Outflow'}
             </span>
             <span style={{ fontFamily: 'var(--font-display)', fontWeight: 'var(--weight-h)', fontSize: 15, color: 'var(--ink)', letterSpacing: 'var(--display-tracking)' }}>
-              {entry.grade} · {entry.date}
+              {entry.grade} · {fmt(entry.date)}
             </span>
           </div>
         </div>
@@ -235,7 +238,7 @@ function ConfirmModal({ entry, locations, onConfirm, onCancel }) {
           border: '1px solid var(--line)', borderRadius: 'var(--radius-input)', overflow: 'hidden',
         }}>
           {[
-            { label: 'Date', value: entry.date },
+            { label: 'Date', value: fmt(entry.date) },
             { label: 'Location', value: locName },
             { label: 'Bags', value: entry.bags.toLocaleString() },
             { label: 'Total weight', value: totalKg > 0 ? totalKg.toLocaleString() + ' kg' : '—' },
@@ -363,8 +366,8 @@ function History({ activeLoc, locations, searchQ = '', profile }) {
   const filtered = entries.filter(h => {
     if (kind !== 'all' && h.kind !== kind) return false
     if (filterGrade && h.grade !== filterGrade) return false
-    if (filterFrom && h.date < filterFrom) return false
-    if (filterTo && h.date > filterTo) return false
+    if (filterFrom && h.date < toISO(filterFrom)) return false
+    if (filterTo && h.date > toISO(filterTo)) return false
     if (searchQ) {
       const locName = locations.find(l => l.id === h.locId)?.name || ''
       const haystack = `${h.grade} ${locName} ${h.date} ${h.kind} ${h.bags} ${h.noteNumber || ''}`.toLowerCase()
@@ -442,8 +445,8 @@ function History({ activeLoc, locations, searchQ = '', profile }) {
     const all = buildRegister(entries)
     return all.filter(r => {
       if (filterGrade && r.grade !== filterGrade) return false
-      if (filterFrom && r.date < filterFrom) return false
-      if (filterTo && r.date > filterTo) return false
+      if (filterFrom && r.date < toISO(filterFrom)) return false
+      if (filterTo && r.date > toISO(filterTo)) return false
       if (searchQ) {
         const locName = locations.find(l => String(l.id) === String(r.locId))?.name || ''
         const haystack = `${r.grade} ${locName} ${r.date} ${r.noteNumbers}`.toLowerCase()
@@ -575,21 +578,23 @@ function History({ activeLoc, locations, searchQ = '', profile }) {
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               <label style={FILTER_LABEL}>From</label>
               <input
-                type="date"
+                type="text"
                 value={filterFrom}
                 onChange={e => setFilterFrom(e.target.value)}
+                placeholder="DD/MM/YYYY"
                 className="field-input"
-                style={{ fontSize: 13, padding: '7px 10px', minWidth: 0 }}
+                style={{ fontSize: 13, padding: '7px 10px', minWidth: 0, width: 110 }}
               />
             </div>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               <label style={FILTER_LABEL}>To</label>
               <input
-                type="date"
+                type="text"
                 value={filterTo}
                 onChange={e => setFilterTo(e.target.value)}
+                placeholder="DD/MM/YYYY"
                 className="field-input"
-                style={{ fontSize: 13, padding: '7px 10px', minWidth: 0 }}
+                style={{ fontSize: 13, padding: '7px 10px', minWidth: 0, width: 110 }}
               />
             </div>
           </div>
@@ -660,6 +665,7 @@ function History({ activeLoc, locations, searchQ = '', profile }) {
                     <th style={{ textAlign: 'right' }}>Bags</th>
                     <th style={{ textAlign: 'right' }}>Unit kg</th>
                     <th style={{ textAlign: 'right' }}>Total kg</th>
+                    <th>Remarks</th>
                     {profile?.role === 'admin' && <th></th>}
                   </tr>
                 </thead>
@@ -674,7 +680,7 @@ function History({ activeLoc, locations, searchQ = '', profile }) {
                         onMouseEnter={() => setHoveredRow(h.id)}
                         onMouseLeave={() => setHoveredRow(null)}
                       >
-                        <td><span className="num" style={{ color: 'var(--ink)' }}>{h.date}</span></td>
+                        <td><span className="num" style={{ color: 'var(--ink)' }}>{fmt(h.date)}</span></td>
                         <td><span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-2)' }}>{h.noteNumber || '—'}</span></td>
                         <td><span className="loc">{locName}</span></td>
                         <td><span className="gradedot" style={{ color: gradeColor(h.grade) }}>{h.grade}</span></td>
@@ -685,6 +691,7 @@ function History({ activeLoc, locations, searchQ = '', profile }) {
                         </td>
                         <td className="num right" style={{ color: 'var(--ink-2)' }}>{h.unitWeight ? h.unitWeight + ' kg' : '—'}</td>
                         <td className="num right" style={{ fontWeight: 500 }}>{totalKg > 0 ? totalKg.toLocaleString() + ' kg' : '—'}</td>
+                        <td style={{ color: 'var(--ink-2)', fontSize: 13 }}>{h.remarks || <span style={{ color: 'var(--ink-3)' }}>—</span>}</td>
                         {profile?.role === 'admin' && (
                           <td style={{ width: 80, whiteSpace: 'nowrap' }}>
                             <div style={{
@@ -765,7 +772,7 @@ function History({ activeLoc, locations, searchQ = '', profile }) {
                     const locName = locations.find(l => String(l.id) === String(r.locId))?.name || r.locId
                     return (
                       <tr key={`${r.date}-${r.locId}-${r.grade}-${i}`}>
-                        <td><span className="num" style={{ color: 'var(--ink)' }}>{r.date}</span></td>
+                        <td><span className="num" style={{ color: 'var(--ink)' }}>{fmt(r.date)}</span></td>
                         <td><span className="loc">{locName}</span></td>
                         <td><span className="gradedot" style={{ color: gradeColor(r.grade) }}>{r.grade}</span></td>
                         <td style={{ color: 'var(--ink-2)', fontSize: 13 }}>{r.noteNumbers || <span style={{ color: 'var(--ink-3)' }}>—</span>}</td>

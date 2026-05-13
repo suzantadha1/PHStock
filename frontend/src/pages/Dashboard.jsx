@@ -7,6 +7,8 @@ import autoTable from 'jspdf-autotable'
 const GRADE_COLORS = { A: 'var(--grade-a)', B: 'var(--grade-b)', C: 'var(--grade-c)', D: 'var(--grade-d)' }
 const INDEX_COLORS = ['var(--grade-a)', 'var(--grade-b)', 'var(--grade-c)', 'var(--grade-d)', 'var(--accent)', 'var(--ink-2)']
 
+const fmt = d => d ? d.split('-').reverse().join('/') : '—'
+
 function gradeColor(name, i = 0) {
   const letter = (name || '').trim()[0]?.toUpperCase()
   return GRADE_COLORS[letter] || INDEX_COLORS[i % INDEX_COLORS.length]
@@ -554,7 +556,7 @@ function Dashboard({ activeLoc, locations, onNavigate }) {
             const locName = locations.find(l => l.id === h.loc)?.name || h.loc
             return (
               <div key={h.id} className="actrow">
-                <div className="when">{h.date}</div>
+                <div className="when">{fmt(h.date)}</div>
                 <div className="desc">
                   <div>
                     {h.kind === 'in' ? 'Intake' : 'Outflow'}{' '}

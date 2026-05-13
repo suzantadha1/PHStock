@@ -260,7 +260,7 @@ function App() {
         )}
         <div className="pagebody">
           {page === 'dashboard' && isAdmin && <Dashboard activeLoc={activeLoc} locations={locations} onNavigate={navigateTo} />}
-          {page === 'add'       && <AddEntry profile={profile} defaultLoc={activeLoc} locations={locations} onSaved={() => navigateTo(isAdmin ? 'dashboard' : 'add')} />}
+          {page === 'add'       && <AddEntry profile={profile} defaultLoc={activeLoc} locations={locations} onSaved={() => {}} />}
           {page === 'history'   && isAdmin && <History activeLoc={activeLoc} locations={locations} searchQ={searchQ} profile={profile} />}
           {page === 'reports'   && isAdmin && <Reports activeLoc={activeLoc} locations={locations} />}
           {page === 'users'     && isAdmin && <UserManagement />}
