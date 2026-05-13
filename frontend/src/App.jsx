@@ -33,7 +33,7 @@ export function Icon({ name, size = 16 }) {
   return <svg className="icn" width={s} height={s} viewBox="0 0 24 24">{paths[name]}</svg>
 }
 
-function MobNav({ page, setPage, items }) {
+function MobNav({ page, setPage, items, onSignOut }) {
   return (
     <nav className="mob-nav">
       {items.map(it => (
@@ -47,6 +47,19 @@ function MobNav({ page, setPage, items }) {
           <span>{it.name}</span>
         </button>
       ))}
+      <button
+        type="button"
+        className="mob-nav-item"
+        style={{ color: 'var(--warn)' }}
+        onClick={onSignOut}
+      >
+        <svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+          <polyline points="16 17 21 12 16 7"/>
+          <line x1="21" y1="12" x2="9" y2="12"/>
+        </svg>
+        <span>Sign out</span>
+      </button>
     </nav>
   )
 }
@@ -253,7 +266,7 @@ function App() {
           {page === 'users'     && isAdmin && <UserManagement />}
         </div>
       </main>
-      <MobNav page={page} setPage={navigateTo} items={navItems} />
+      <MobNav page={page} setPage={navigateTo} items={navItems} onSignOut={() => supabase.auth.signOut()} />
     </div>
   )
 }
