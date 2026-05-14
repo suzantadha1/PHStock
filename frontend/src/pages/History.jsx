@@ -3,10 +3,22 @@ import { supabase } from '../supabaseClient'
 import { Icon } from '../App'
 
 const GRADE_COLORS = { A: 'var(--grade-a)', B: 'var(--grade-b)', C: 'var(--grade-c)', D: 'var(--grade-d)' }
-const INDEX_COLORS = ['var(--grade-a)', 'var(--grade-b)', 'var(--grade-c)', 'var(--grade-d)', 'var(--accent)']
-function gradeColor(name, i = 0) {
-  const letter = (name || '').trim()[0]?.toUpperCase()
-  return GRADE_COLORS[letter] || INDEX_COLORS[i % INDEX_COLORS.length]
+const SAFE_HUES = [180, 270, 315, 98, 225, 335, 195, 250, 168, 290]
+function buildGradeColorMap(names) {
+  const map = {}; let ci = 0
+  for (const name of names) {
+    const key = (name || '').trim().toUpperCase()
+    if (key === 'A' || key.startsWith('A ')) { map[name] = GRADE_COLORS.A; continue }
+    if (key === 'B' || key.startsWith('B ')) { map[name] = GRADE_COLORS.B; continue }
+    if (key === 'C' || key.startsWith('C ')) { map[name] = GRADE_COLORS.C; continue }
+    if (key === 'D' || key.startsWith('D ')) { map[name] = GRADE_COLORS.D; continue }
+    map[name] = `hsl(${SAFE_HUES[ci % SAFE_HUES.length]}, 62%, 40%)`
+    ci++
+  }
+  return map
+}
+function gradeColor(name, colorMap = {}) {
+  return colorMap[name] || '#888'
 }
 
 const FILTER_LABEL = {
@@ -163,7 +175,7 @@ function EditModal({ entry, locations, grades, onSave, onCancel }) {
             <div className="field-label">Grade</div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {grades.map(g => {
-                const gc = gradeColor(g)
+                const gc = gradeColor(g, colorMap)
                 const active = grade === g
                 return (
                   <button
@@ -298,6 +310,7 @@ function History({ activeLoc, locations, searchQ = '', profile }) {
   const gradeOptions = grades.length > 0
     ? grades
     : [...new Set(entries.map(e => e.grade))].sort()
+  const colorMap = useMemo(() => buildGradeColorMap(gradeOptions), [gradeOptions])
 
   async function fetchEntries() {
     setLoading(true)
@@ -552,7 +565,7 @@ function History({ activeLoc, locations, searchQ = '', profile }) {
             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
               {['', ...gradeOptions].map(g => {
                 const isActive = filterGrade === g
-                const gc = gradeColor(g)
+                const gc = gradeColor(g, colorMap)
                 return (
                   <button
                     key={g || 'all'}
@@ -683,7 +696,7 @@ function History({ activeLoc, locations, searchQ = '', profile }) {
                         <td><span className="num" style={{ color: 'var(--ink)' }}>{fmt(h.date)}</span></td>
                         <td><span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-2)' }}>{h.noteNumber || '—'}</span></td>
                         <td><span className="loc">{locName}</span></td>
-                        <td><span className="gradedot" style={{ color: gradeColor(h.grade) }}>{h.grade}</span></td>
+                        <td><span className="gradedot" style={{ color: gradeColor(h.grade, colorMap) }}>{h.grade}</span></td>
                         <td className="num right">
                           <span className={'delta-pill ' + (h.kind === 'in' ? 'in' : 'out')}>
                             {h.kind === 'in' ? '+' : '−'}{h.bags}
@@ -774,7 +787,7 @@ function History({ activeLoc, locations, searchQ = '', profile }) {
                       <tr key={`${r.date}-${r.locId}-${r.grade}-${i}`}>
                         <td><span className="num" style={{ color: 'var(--ink)' }}>{fmt(r.date)}</span></td>
                         <td><span className="loc">{locName}</span></td>
-                        <td><span className="gradedot" style={{ color: gradeColor(r.grade) }}>{r.grade}</span></td>
+                        <td><span className="gradedot" style={{ color: gradeColor(r.grade, colorMap) }}>{r.grade}</span></td>
                         <td style={{ color: 'var(--ink-2)', fontSize: 13 }}>{r.noteNumbers || <span style={{ color: 'var(--ink-3)' }}>—</span>}</td>
                         <td className="num right" style={{ color: 'var(--ink-2)' }}>{r.opening.toLocaleString()}</td>
                         <td className="num right">

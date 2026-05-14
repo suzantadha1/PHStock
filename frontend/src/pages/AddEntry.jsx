@@ -3,10 +3,22 @@ import { supabase } from '../supabaseClient'
 import Toast from '../components/Toast'
 
 const GRADE_COLORS = { A: 'var(--grade-a)', B: 'var(--grade-b)', C: 'var(--grade-c)', D: 'var(--grade-d)' }
-const INDEX_COLORS = ['var(--grade-a)', 'var(--grade-b)', 'var(--grade-c)', 'var(--grade-d)', 'var(--accent)']
-function gradeColor(name, i = 0) {
-  const letter = (name || '').trim()[0]?.toUpperCase()
-  return GRADE_COLORS[letter] || INDEX_COLORS[i % INDEX_COLORS.length]
+const SAFE_HUES = [180, 270, 315, 98, 225, 335, 195, 250, 168, 290]
+function buildGradeColorMap(names) {
+  const map = {}; let ci = 0
+  for (const name of names) {
+    const key = (name || '').trim().toUpperCase()
+    if (key === 'A' || key.startsWith('A ')) { map[name] = GRADE_COLORS.A; continue }
+    if (key === 'B' || key.startsWith('B ')) { map[name] = GRADE_COLORS.B; continue }
+    if (key === 'C' || key.startsWith('C ')) { map[name] = GRADE_COLORS.C; continue }
+    if (key === 'D' || key.startsWith('D ')) { map[name] = GRADE_COLORS.D; continue }
+    map[name] = `hsl(${SAFE_HUES[ci % SAFE_HUES.length]}, 62%, 40%)`
+    ci++
+  }
+  return map
+}
+function gradeColor(name, colorMap = {}) {
+  return colorMap[name] || '#888'
 }
 
 function AddEntry({ profile, defaultLoc, locations, onSaved }) {
@@ -190,6 +202,7 @@ function AddEntry({ profile, defaultLoc, locations, onSaved }) {
   const visibleLocations = localLocations ?? locations
   const gradeObj = grades.find(g => g.id === grade)
   const locObj = visibleLocations.find(l => l.id === locId)
+  const colorMap = buildGradeColorMap(grades.map(g => g.name))
 
   const xBtn = (onClick) => (
     <button
@@ -354,8 +367,8 @@ function AddEntry({ profile, defaultLoc, locations, onSaved }) {
               )}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 10 }}>
-              {grades.map((g, i) => {
-                const color = gradeColor(g.name, i)
+              {grades.map((g) => {
+                const color = gradeColor(g.name, colorMap)
                 const selected = grade === g.id
                 return (
                   <div key={g.id} style={{ position: 'relative' }}>
@@ -495,7 +508,7 @@ function AddEntry({ profile, defaultLoc, locations, onSaved }) {
             }}>
               {[
                 { label: kind === 'in' ? 'Intake' : 'Outflow', value: locObj.name },
-                { label: 'Grade', value: gradeObj.name, color: gradeColor(gradeObj.name) },
+                { label: 'Grade', value: gradeObj.name, color: gradeColor(gradeObj.name, colorMap) },
                 { label: 'Bags', value: bags.toLocaleString() },
                 { label: 'Net weight', value: (bags * bagW).toLocaleString() + ' kg' },
               ].map((item, i, arr) => (

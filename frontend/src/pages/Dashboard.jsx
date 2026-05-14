@@ -5,13 +5,25 @@ import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 
 const GRADE_COLORS = { A: 'var(--grade-a)', B: 'var(--grade-b)', C: 'var(--grade-c)', D: 'var(--grade-d)' }
-const INDEX_COLORS = ['var(--grade-a)', 'var(--grade-b)', 'var(--grade-c)', 'var(--grade-d)', 'var(--accent)', 'var(--ink-2)']
 
 const fmt = d => d ? d.split('-').reverse().join('/') : '—'
 
-function gradeColor(name, i = 0) {
-  const letter = (name || '').trim()[0]?.toUpperCase()
-  return GRADE_COLORS[letter] || INDEX_COLORS[i % INDEX_COLORS.length]
+const SAFE_HUES = [180, 270, 315, 98, 225, 335, 195, 250, 168, 290]
+function buildGradeColorMap(names) {
+  const map = {}; let ci = 0
+  for (const name of names) {
+    const key = (name || '').trim().toUpperCase()
+    if (key === 'A' || key.startsWith('A ')) { map[name] = GRADE_COLORS.A; continue }
+    if (key === 'B' || key.startsWith('B ')) { map[name] = GRADE_COLORS.B; continue }
+    if (key === 'C' || key.startsWith('C ')) { map[name] = GRADE_COLORS.C; continue }
+    if (key === 'D' || key.startsWith('D ')) { map[name] = GRADE_COLORS.D; continue }
+    map[name] = `hsl(${SAFE_HUES[ci % SAFE_HUES.length]}, 62%, 40%)`
+    ci++
+  }
+  return map
+}
+function gradeColor(name, colorMap = {}) {
+  return colorMap[name] || '#888'
 }
 
 function Spark({ values, color = 'var(--ink-2)', w = 96, h = 36 }) {
@@ -207,8 +219,10 @@ function Dashboard({ activeLoc, locations, onNavigate }) {
       gradeMap[item.grade] = (gradeMap[item.grade] || 0) - item.quantity
     })
 
-    const grades = Object.entries(gradeMap)
-      .map(([name, value], i) => ({ key: name, name, value, color: gradeColor(name, i) }))
+    const gradeNames = Object.keys(gradeMap).sort()
+    const colorMap = buildGradeColorMap(gradeNames)
+    const grades = gradeNames
+      .map(name => ({ key: name, name, value: gradeMap[name], color: gradeColor(name, colorMap) }))
     setStockByGrade(grades)
 
     // Per-location breakdown for all-locations view
@@ -233,12 +247,13 @@ function Dashboard({ activeLoc, locations, onNavigate }) {
         })
       })
       const allGrades = [...gradeNames].sort()
+      const locColorMap = buildGradeColorMap(allGrades)
       const ld = locations.map(l => {
         const lid = String(l.id)
-        const segs = allGrades.map((gname, i) => ({
+        const segs = allGrades.map((gname) => ({
           key: gname,
           value: Math.max(0, flat[lid + '|' + gname] || 0),
-          color: gradeColor(gname, i),
+          color: gradeColor(gname, locColorMap),
         }))
         const total = segs.reduce((s, g) => s + g.value, 0)
         return { id: l.id, label: l.name, segments: segs, total }
@@ -561,7 +576,7 @@ function Dashboard({ activeLoc, locations, onNavigate }) {
                   <div>
                     {h.kind === 'in' ? 'Intake' : 'Outflow'}{' '}
                     <strong className="num">{h.bags}</strong> bags ·{' '}
-                    <span style={{ color: gradeColor(h.grade, 0), fontWeight: 600 }}>{h.grade}</span>
+                    <span style={{ color: gradeColor(h.grade), fontWeight: 600 }}>{h.grade}</span>
                   </div>
                   <div style={{ color: 'var(--ink-3)', fontSize: 12, marginTop: 2 }}>{locName}</div>
                 </div>
