@@ -43,6 +43,8 @@ function AddEntry({ profile, defaultLoc, locations, onSaved }) {
   const [localLocations, setLocalLocations] = useState(null)
   const [manageLocs, setManageLocs] = useState(false)
   const [manageGrades, setManageGrades] = useState(false)
+  const [editingGradeId, setEditingGradeId] = useState(null)
+  const [editingGradeName, setEditingGradeName] = useState('')
 
   useEffect(() => {
     if (profile?.role === 'worker' && locations.length > 0) {
@@ -125,6 +127,20 @@ function AddEntry({ profile, defaultLoc, locations, onSaved }) {
       setGrades(snapshot)
       if (grade === id) setGrade(id)
       alert(err ? err.message : 'Delete blocked — go to Supabase → Authentication → Policies and add a DELETE policy for the grades table.')
+    }
+  }
+
+  async function handleRenameGrade(id) {
+    const name = editingGradeName.trim()
+    if (!name) return
+    const snapshot = grades
+    setGrades(prev => prev.map(g => g.id === id ? { ...g, name } : g))
+    setEditingGradeId(null)
+    setEditingGradeName('')
+    const { error: err } = await supabase.from('grades').update({ name }).eq('id', id)
+    if (err) {
+      setGrades(snapshot)
+      alert('Could not rename grade: ' + err.message)
     }
   }
 
@@ -406,6 +422,34 @@ function AddEntry({ profile, defaultLoc, locations, onSaved }) {
                       </div>
                     </button>
                     {manageGrades && xBtn((e) => { e.stopPropagation(); handleDeleteGrade(g.id) })}
+                    {manageGrades && editingGradeId !== g.id && (
+                      <button
+                        type="button"
+                        onClick={e => { e.stopPropagation(); setEditingGradeId(g.id); setEditingGradeName(g.name) }}
+                        style={{
+                          position: 'absolute', bottom: -6, right: -6,
+                          width: 18, height: 18, borderRadius: '50%',
+                          background: 'var(--ink-2)', color: '#fff',
+                          border: '1.5px solid var(--surface)',
+                          cursor: 'pointer', fontSize: 10, lineHeight: 1,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          padding: 0, zIndex: 1,
+                        }}
+                      >✎</button>
+                    )}
+                    {manageGrades && editingGradeId === g.id && (
+                      <div style={{ display: 'flex', gap: 4, marginTop: 6 }} onClick={e => e.stopPropagation()}>
+                        <input
+                          autoFocus
+                          className="field-input"
+                          style={{ flex: 1, fontSize: 12, padding: '4px 8px' }}
+                          value={editingGradeName}
+                          onChange={e => setEditingGradeName(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') handleRenameGrade(g.id); if (e.key === 'Escape') { setEditingGradeId(null); setEditingGradeName('') } }}
+                        />
+                        <button type="button" className="btn primary" style={{ padding: '4px 8px', fontSize: 11 }} onClick={() => handleRenameGrade(g.id)}>✓</button>
+                      </div>
+                    )}
                   </div>
                 )
               })}
