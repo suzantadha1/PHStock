@@ -181,6 +181,7 @@ function Reports({ activeLoc, locations }) {
   const [totIn, setTotIn] = useState(0)
   const [totOut, setTotOut] = useState(0)
   const [rawEntries, setRawEntries] = useState([])
+  const [weightData, setWeightData] = useState({ totalIn: 0, totalOut: 0, byLoc: [] })
   const [loading, setLoading] = useState(true)
 
   useEffect(() => { fetchReport() }, [activeLoc, range, rangeFrom, rangeTo])
@@ -243,6 +244,25 @@ function Reports({ activeLoc, locations }) {
     const to = (outShips || []).flatMap(s => s.outbound_items).reduce((s, i) => s + i.quantity, 0)
     setTotIn(ti)
     setTotOut(to)
+
+    // Weight aggregation per location
+    const wByLoc = {}
+    ;(inShips || []).forEach(s => {
+      const lid = s.cold_storage_id
+      if (!wByLoc[lid]) wByLoc[lid] = { locId: lid, weightIn: 0, weightOut: 0 }
+      s.inbound_items.forEach(item => { wByLoc[lid].weightIn += item.quantity * (item.unit_weight || 0) })
+    })
+    ;(outShips || []).forEach(s => {
+      const lid = s.cold_storage_id
+      if (!wByLoc[lid]) wByLoc[lid] = { locId: lid, weightIn: 0, weightOut: 0 }
+      s.outbound_items.forEach(item => { wByLoc[lid].weightOut += item.quantity * (item.unit_weight || 0) })
+    })
+    const byLoc = Object.values(wByLoc)
+    setWeightData({
+      totalIn: byLoc.reduce((s, l) => s + l.weightIn, 0),
+      totalOut: byLoc.reduce((s, l) => s + l.weightOut, 0),
+      byLoc,
+    })
 
     // Grade totals — net, intake-only, outflow-only
     const gmap = {}, inMap = {}, outMap = {}
@@ -593,9 +613,65 @@ function Reports({ activeLoc, locations }) {
         </div>
       )}
 
+      {/* Weight Summary */}
+      <div className="card">
+        <div className="card-hd">
+          <div>
+            <div className="card-eyebrow">weight</div>
+            <div className="card-title display">Weight Summary</div>
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--ink-3)', fontFamily: 'var(--font-mono)' }}>{rangeLabel}</div>
+        </div>
+        <div className="card-bd">
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: weightData.byLoc.length > 1 ? 24 : 0 }}>
+            {[
+              { label: 'Total Weight In', value: weightData.totalIn, color: 'var(--grade-a)', sign: null },
+              { label: 'Total Weight Out', value: weightData.totalOut, color: 'var(--warn)', sign: null },
+              { label: 'Difference', value: weightData.totalIn - weightData.totalOut, color: weightData.totalIn - weightData.totalOut >= 0 ? 'var(--grade-a)' : 'var(--warn)', sign: true },
+            ].map(col => (
+              <div key={col.label} style={{ textAlign: 'center', padding: '12px 0', borderRadius: 'var(--radius-card)', background: 'var(--surface-raised)' }}>
+                <div style={{ fontSize: 10, color: 'var(--ink-3)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 6 }}>{col.label}</div>
+                <div style={{ fontFamily: 'var(--font-num)', fontSize: 24, fontWeight: 700, color: col.color, lineHeight: 1 }}>
+                  {col.sign ? (col.value >= 0 ? '+' : '−') : ''}{Math.abs(col.value).toLocaleString()}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 4 }}>kg</div>
+              </div>
+            ))}
+          </div>
+
+          {weightData.byLoc.length > 1 && (
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr>
+                  {['Location', 'Weight In (kg)', 'Weight Out (kg)', 'Difference (kg)'].map((h, i) => (
+                    <th key={h} style={{ textAlign: i === 0 ? 'left' : 'right', padding: '6px 0', borderBottom: '1px solid var(--line)', color: 'var(--ink-3)', fontFamily: 'var(--font-mono)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', fontWeight: 500 }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {weightData.byLoc.map(row => {
+                  const diff = row.weightIn - row.weightOut
+                  const locName = locations.find(l => l.id === row.locId)?.name || row.locId
+                  return (
+                    <tr key={row.locId}>
+                      <td style={{ padding: '8px 0', borderBottom: '1px solid var(--line)', fontWeight: 500 }}>{locName}</td>
+                      <td style={{ padding: '8px 0', borderBottom: '1px solid var(--line)', textAlign: 'right', fontFamily: 'var(--font-num)', color: 'var(--grade-a)' }}>{row.weightIn.toLocaleString()}</td>
+                      <td style={{ padding: '8px 0', borderBottom: '1px solid var(--line)', textAlign: 'right', fontFamily: 'var(--font-num)', color: 'var(--warn)' }}>{row.weightOut.toLocaleString()}</td>
+                      <td style={{ padding: '8px 0', borderBottom: '1px solid var(--line)', textAlign: 'right', fontFamily: 'var(--font-num)', fontWeight: 600, color: diff >= 0 ? 'var(--grade-a)' : 'var(--warn)' }}>
+                        {diff >= 0 ? '+' : '−'}{Math.abs(diff).toLocaleString()}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+
       {/* Grade mix + intake + outflow breakdown */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 18 }}>
-        <div className="card">
+<div className="card">
           <div className="card-hd">
             <div>
               <div className="card-eyebrow">composition</div>

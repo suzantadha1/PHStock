@@ -99,6 +99,7 @@ function EditModal({ entry, locations, grades, onSave, onCancel }) {
   const [bags, setBags] = useState(entry.bags)
   const [unitWeight, setUnitWeight] = useState(entry.unitWeight ?? '')
   const [saving, setSaving] = useState(false)
+  const colorMap = buildGradeColorMap(grades)
 
   async function handleSave() {
     setSaving(true)
