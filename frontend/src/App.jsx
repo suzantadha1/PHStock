@@ -277,7 +277,7 @@ function App() {
         <div className="pagebody">
           {page === 'dashboard' && canViewPage('dashboard') && <Dashboard activeLoc={effectiveActiveLoc} locations={locations} onNavigate={navigateTo} />}
           {page === 'add'       && <AddEntry profile={profile} defaultLoc={effectiveActiveLoc} locations={locations} onSaved={() => {}} />}
-          {page === 'history'   && canViewPage('history') && <History activeLoc={effectiveActiveLoc} locations={locations} searchQ={searchQ} profile={profile} />}
+          {page === 'history'   && canViewPage('history') && <History activeLoc={effectiveActiveLoc} locations={locations} searchQ={searchQ} profile={profile} isAdmin={isAdmin} />}
           {page === 'reports'   && canViewPage('reports') && <Reports activeLoc={effectiveActiveLoc} locations={locations} />}
           {page === 'users'     && isAdmin && <UserManagement />}
         </div>

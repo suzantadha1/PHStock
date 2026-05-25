@@ -274,7 +274,7 @@ function ConfirmModal({ entry, locations, onConfirm, onCancel }) {
   )
 }
 
-function History({ activeLoc, locations, searchQ = '', profile }) {
+function History({ activeLoc, locations, searchQ = '', profile, isAdmin }) {
   const [entries, setEntries] = useState([])
   const [kind, setKind] = useState('all')
   const [loading, setLoading] = useState(true)
@@ -496,7 +496,7 @@ function History({ activeLoc, locations, searchQ = '', profile }) {
       <div style={{ display: 'flex', gap: 4 }}>
         {[
           { value: 'register', label: 'Register' },
-          { value: 'movements', label: 'Movements' },
+          ...(isAdmin ? [{ value: 'movements', label: 'Movements' }] : []),
         ].map(({ value, label }) => (
           <button
             key={value}
@@ -669,7 +669,7 @@ function History({ activeLoc, locations, searchQ = '', profile }) {
       </div>
 
       {/* Movements table */}
-      {view === 'movements' && (
+      {view === 'movements' && isAdmin && (
         <div className="card" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <div className="card-hd" style={{ flexShrink: 0 }}>
             <div className="card-title display">All movements</div>
