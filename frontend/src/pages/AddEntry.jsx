@@ -201,7 +201,8 @@ function AddEntry({ profile, defaultLoc, locations, onSaved }) {
       setKind(null)
       setDate(new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }))
       setNoteNumber('')
-      setLocId(null)
+      const workerLoc = profile?.role === 'worker' ? locations.find(l => l.id === profile.location_id) : null
+      setLocId(workerLoc ? workerLoc.id : null)
       setGrade(null)
       setBags('')
       setBagW('')
