@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabaseClient'
 import Toast from '../components/Toast'
+import DatePicker from '../components/DatePicker'
 
 const GRADE_COLORS = { A: 'var(--grade-a)', B: 'var(--grade-b)', C: 'var(--grade-c)', D: 'var(--grade-d)' }
 const SAFE_HUES = [180, 270, 315, 98, 225, 335, 195, 250, 168, 290]
@@ -298,12 +299,7 @@ function AddEntry({ profile, defaultLoc, locations, onSaved }) {
           {/* Date */}
           <div className="field">
             <div className="field-label">Date</div>
-            <input
-              type="date"
-              className="field-input"
-              value={date}
-              onChange={e => setDate(e.target.value)}
-            />
+            <DatePicker value={date} onChange={setDate} />
           </div>
 
           {/* Reference Number */}

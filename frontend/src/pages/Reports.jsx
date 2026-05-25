@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
+import DatePicker from '../components/DatePicker'
 
 const fmt = d => d ? d.split('-').reverse().join('/') : '—'
-const toISO = d => { if (!d) return ''; const p = d.split('/'); return p.length === 3 && p[2].length === 4 ? `${p[2]}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}` : '' }
 import { supabase } from '../supabaseClient'
 import { Icon } from '../App'
 import jsPDF from 'jspdf'
@@ -171,8 +171,6 @@ function Reports({ activeLoc, locations }) {
   const [range, setRange] = useState('Daily')
   const [rangeFrom, setRangeFrom] = useState(offsetDate(7))
   const [rangeTo, setRangeTo] = useState(today)
-  const [rangeFromDisplay, setRangeFromDisplay] = useState(fmt(offsetDate(7)))
-  const [rangeToDisplay, setRangeToDisplay] = useState(fmt(today))
   const [trendData, setTrendData] = useState([])
   const [gradeData, setGradeData] = useState([])
   const [intakeGradeData, setIntakeGradeData] = useState([])
@@ -481,41 +479,14 @@ function Reports({ activeLoc, locations }) {
 
         {range === 'Range' && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <input
-              type="text"
-              value={rangeFromDisplay}
-              placeholder="DD/MM/YYYY"
-              onChange={e => {
-                setRangeFromDisplay(e.target.value)
-                const iso = toISO(e.target.value)
-                if (iso) setRangeFrom(iso)
-                else if (!e.target.value) setRangeFrom('')
-              }}
-              className="field-input"
-              style={{ padding: '7px 12px', fontSize: 13, width: 120 }}
-            />
+            <DatePicker value={rangeFrom} onChange={setRangeFrom} style={{ width: 140 }} inputStyle={{ padding: '7px 12px', fontSize: 13 }} />
             <span style={{ color: 'var(--ink-3)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>to</span>
-            <input
-              type="text"
-              value={rangeToDisplay}
-              placeholder="DD/MM/YYYY"
-              onChange={e => {
-                setRangeToDisplay(e.target.value)
-                const iso = toISO(e.target.value)
-                if (iso) setRangeTo(iso)
-                else if (!e.target.value) setRangeTo('')
-              }}
-              className="field-input"
-              style={{ padding: '7px 12px', fontSize: 13, width: 120 }}
-            />
+            <DatePicker value={rangeTo} onChange={setRangeTo} style={{ width: 140 }} inputStyle={{ padding: '7px 12px', fontSize: 13 }} />
             <button
               type="button"
               className="btn"
               style={{ padding: '7px 10px', fontSize: 12 }}
-              onClick={() => {
-                setRangeFrom(offsetDate(7)); setRangeFromDisplay(fmt(offsetDate(7)))
-                setRangeTo(today); setRangeToDisplay(fmt(today))
-              }}
+              onClick={() => { setRangeFrom(offsetDate(7)); setRangeTo(today) }}
             >Reset</button>
           </div>
         )}

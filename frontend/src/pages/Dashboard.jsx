@@ -95,12 +95,6 @@ function KPI({ label, value, unit, delta, deltaLabel, dir, spark, sparkColor }) 
         <span>{value}</span>
         {unit && <span className="kpi-unit">{unit}</span>}
       </div>
-      <div className="kpi-foot">
-        <span className={'kpi-delta ' + (dir === 'up' ? 'up' : 'down')}>
-          <Icon name={dir === 'up' ? 'up' : 'down'} size={12} /> {delta}
-        </span>
-        <span style={{ color: 'var(--ink-3)' }}>{deltaLabel}</span>
-      </div>
       {spark && <Spark values={spark} color={sparkColor || 'var(--grade-a)'} />}
     </div>
   )
@@ -201,8 +195,8 @@ function Dashboard({ activeLoc, locations, onNavigate }) {
   async function fetchData() {
     setLoading(true)
 
-    let inQ = supabase.from('inbound_shipments').select('cold_storage_id, inbound_items(grade, quantity)')
-    let outQ = supabase.from('outbound_shipments').select('cold_storage_id, outbound_items(grade, quantity)')
+    let inQ = supabase.from('inbound_shipments').select('cold_storage_id, inbound_items(grade, quantity, unit_weight)')
+    let outQ = supabase.from('outbound_shipments').select('cold_storage_id, outbound_items(grade, quantity, unit_weight)')
 
     if (activeLoc !== 'all') {
       inQ = inQ.eq('cold_storage_id', activeLoc)
@@ -212,17 +206,20 @@ function Dashboard({ activeLoc, locations, onNavigate }) {
     const [{ data: inShips }, { data: outShips }] = await Promise.all([inQ, outQ])
 
     const gradeMap = {}
+    const weightMap = {}
     ;(inShips || []).flatMap(s => s.inbound_items.map(i => ({ ...i, loc: s.cold_storage_id }))).forEach(item => {
       gradeMap[item.grade] = (gradeMap[item.grade] || 0) + item.quantity
+      weightMap[item.grade] = (weightMap[item.grade] || 0) + item.quantity * (item.unit_weight || 0)
     })
     ;(outShips || []).flatMap(s => s.outbound_items.map(i => ({ ...i, loc: s.cold_storage_id }))).forEach(item => {
       gradeMap[item.grade] = (gradeMap[item.grade] || 0) - item.quantity
+      weightMap[item.grade] = (weightMap[item.grade] || 0) - item.quantity * (item.unit_weight || 0)
     })
 
     const gradeNames = Object.keys(gradeMap).sort()
     const colorMap = buildGradeColorMap(gradeNames)
     const grades = gradeNames
-      .map(name => ({ key: name, name, value: gradeMap[name], color: gradeColor(name, colorMap) }))
+      .map(name => ({ key: name, name, value: gradeMap[name], weight: Math.max(0, weightMap[name] || 0), color: gradeColor(name, colorMap) }))
     setStockByGrade(grades)
 
     // Per-location breakdown for all-locations view
@@ -304,6 +301,7 @@ function Dashboard({ activeLoc, locations, onNavigate }) {
   }
 
   const total = useMemo(() => stockByGrade.reduce((s, g) => s + g.value, 0), [stockByGrade])
+  const totalWeight = useMemo(() => stockByGrade.reduce((s, g) => s + (g.weight || 0), 0), [stockByGrade])
   const maxLoc = useMemo(() => Math.max(...locData.map(l => l.total), 1), [locData])
   const locName = activeLoc === 'all' ? 'All locations' : (locations.find(l => l.id === activeLoc)?.name || '')
   const positiveData = stockByGrade.filter(d => d.value > 0)
@@ -417,13 +415,13 @@ function Dashboard({ activeLoc, locations, onNavigate }) {
           sparkColor="var(--grade-a)"
         />
         <KPI
-          label="Grade A bags"
-          value={(aGrade?.value || 0).toLocaleString()}
-          unit="bags"
-          delta="premium"
-          deltaLabel="market-ready"
+          label="Total weight"
+          value={totalWeight.toLocaleString()}
+          unit="kg"
+          delta="all grades"
+          deltaLabel="combined"
           dir="up"
-          sparkColor="var(--grade-a)"
+          sparkColor="var(--grade-b)"
         />
         <KPI
           label="Grade count"
@@ -493,7 +491,10 @@ function Dashboard({ activeLoc, locations, onNavigate }) {
                           <div className="swatch" style={{ background: isNeg ? 'var(--warn)' : g.color }} />
                           <div className="gname" style={{ color: isNeg ? 'var(--warn)' : undefined }}>{g.name}</div>
                           <div className="gpct num">{isNeg ? '—' : p + '%'}</div>
-                          <div className="gnum" style={{ color: isNeg ? 'var(--warn)' : undefined }}>{g.value.toLocaleString()}</div>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                            <div className="gnum" style={{ color: isNeg ? 'var(--warn)' : undefined }}>{g.value.toLocaleString()}</div>
+                            <div style={{ fontFamily: 'var(--font-num)', fontSize: 11, color: 'var(--ink-2)', marginTop: 1 }}>{g.weight ? g.weight.toLocaleString() + ' kg' : '—'}</div>
+                          </div>
                         </div>
                       )
                     })}

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { Icon } from '../App'
+import DatePicker from '../components/DatePicker'
 
 const GRADE_COLORS = { A: 'var(--grade-a)', B: 'var(--grade-b)', C: 'var(--grade-c)', D: 'var(--grade-d)' }
 const SAFE_HUES = [180, 270, 315, 98, 225, 335, 195, 250, 168, 290]
@@ -33,7 +34,6 @@ const FILTER_LABEL = {
 }
 
 const fmt = d => d ? d.split('-').reverse().join('/') : '—'
-const toISO = d => { if (!d) return ''; const p = d.split('/'); return p.length === 3 ? `${p[2]}-${p[1]}-${p[0]}` : '' }
 
 function buildRegister(entries) {
   const byLocGrade = {}
@@ -155,7 +155,7 @@ function EditModal({ entry, locations, grades, onSave, onCancel }) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
             <div className="field">
               <div className="field-label">Date</div>
-              <input type="date" className="field-input" value={date} onChange={e => setDate(e.target.value)} style={{ minWidth: 0 }} />
+              <DatePicker value={date} onChange={setDate} />
             </div>
             <div className="field">
               <div className="field-label">Reference number</div>
@@ -313,6 +313,14 @@ function History({ activeLoc, locations, searchQ = '', profile }) {
     : [...new Set(entries.map(e => e.grade))].sort()
   const colorMap = useMemo(() => buildGradeColorMap(gradeOptions), [gradeOptions])
 
+  const closingByGrade = useMemo(() => {
+    const map = {}
+    entries.forEach(e => {
+      map[e.grade] = (map[e.grade] || 0) + (e.kind === 'in' ? e.bags : -e.bags)
+    })
+    return map
+  }, [entries])
+
   async function fetchEntries() {
     setLoading(true)
 
@@ -380,8 +388,8 @@ function History({ activeLoc, locations, searchQ = '', profile }) {
   const filtered = entries.filter(h => {
     if (kind !== 'all' && h.kind !== kind) return false
     if (filterGrade && h.grade !== filterGrade) return false
-    if (filterFrom && h.date < toISO(filterFrom)) return false
-    if (filterTo && h.date > toISO(filterTo)) return false
+    if (filterFrom && h.date < filterFrom) return false
+    if (filterTo && h.date > filterTo) return false
     if (searchQ) {
       const locName = locations.find(l => l.id === h.locId)?.name || ''
       const haystack = `${h.grade} ${locName} ${h.date} ${h.kind} ${h.bags} ${h.noteNumber || ''}`.toLowerCase()
@@ -459,8 +467,8 @@ function History({ activeLoc, locations, searchQ = '', profile }) {
     const all = buildRegister(entries)
     return all.filter(r => {
       if (filterGrade && r.grade !== filterGrade) return false
-      if (filterFrom && r.date < toISO(filterFrom)) return false
-      if (filterTo && r.date > toISO(filterTo)) return false
+      if (filterFrom && r.date < filterFrom) return false
+      if (filterTo && r.date > filterTo) return false
       if (searchQ) {
         const locName = locations.find(l => String(l.id) === String(r.locId))?.name || ''
         const haystack = `${r.grade} ${locName} ${r.date} ${r.noteNumbers}`.toLowerCase()
@@ -567,18 +575,33 @@ function History({ activeLoc, locations, searchQ = '', profile }) {
               {['', ...gradeOptions].map(g => {
                 const isActive = filterGrade === g
                 const gc = gradeColor(g, colorMap)
+                const closing = g ? (closingByGrade[g] || 0) : null
                 return (
                   <button
                     key={g || 'all'}
                     type="button"
                     className={'subtab' + (isActive ? ' is-on' : '')}
                     onClick={() => setFilterGrade(g)}
-                    style={isActive ? (g
-                      ? { color: gc, background: `color-mix(in oklab, ${gc} 12%, var(--surface))`, borderColor: `color-mix(in oklab, ${gc} 35%, transparent)` }
-                      : { color: 'var(--ink)', background: 'var(--bg-2)', borderColor: 'var(--line-strong)' }
-                    ) : {}}
+                    style={{
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+                      ...(isActive ? (g
+                        ? { color: gc, background: `color-mix(in oklab, ${gc} 12%, var(--surface))`, borderColor: `color-mix(in oklab, ${gc} 35%, transparent)` }
+                        : { color: 'var(--ink)', background: 'var(--bg-2)', borderColor: 'var(--line-strong)' }
+                      ) : {}),
+                    }}
                   >
-                    {g || 'All'}
+                    <span>{g || 'All'}</span>
+                    {closing !== null && (
+                      <span style={{
+                        fontSize: 10,
+                        fontFamily: 'var(--font-mono)',
+                        color: isActive ? 'inherit' : 'var(--ink-3)',
+                        fontWeight: 600,
+                        opacity: isActive ? 0.8 : 1,
+                      }}>
+                        {closing.toLocaleString()}
+                      </span>
+                    )}
                   </button>
                 )
               })}
@@ -591,25 +614,11 @@ function History({ activeLoc, locations, searchQ = '', profile }) {
           <div className="date-range-row" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               <label style={FILTER_LABEL}>From</label>
-              <input
-                type="text"
-                value={filterFrom}
-                onChange={e => setFilterFrom(e.target.value)}
-                placeholder="DD/MM/YYYY"
-                className="field-input"
-                style={{ fontSize: 13, padding: '7px 10px', minWidth: 0, width: 110 }}
-              />
+              <DatePicker value={filterFrom} onChange={setFilterFrom} style={{ width: 130 }} inputStyle={{ fontSize: 13, padding: '7px 10px' }} />
             </div>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               <label style={FILTER_LABEL}>To</label>
-              <input
-                type="text"
-                value={filterTo}
-                onChange={e => setFilterTo(e.target.value)}
-                placeholder="DD/MM/YYYY"
-                className="field-input"
-                style={{ fontSize: 13, padding: '7px 10px', minWidth: 0, width: 110 }}
-              />
+              <DatePicker value={filterTo} onChange={setFilterTo} style={{ width: 130 }} inputStyle={{ fontSize: 13, padding: '7px 10px' }} />
             </div>
           </div>
 
