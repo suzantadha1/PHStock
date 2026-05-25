@@ -178,9 +178,11 @@ const ADMIN_NAV = [
   { id: 'users',     name: 'Users',     icon: 'users' },
 ]
 
-const WORKER_NAV = [
-  { id: 'add', name: 'Add Entry', icon: 'plus' },
-]
+const PAGE_NAV_DEFS = {
+  dashboard: { id: 'dashboard', name: 'Dashboard', icon: 'dashboard' },
+  history:   { id: 'history',   name: 'History',   icon: 'history' },
+  reports:   { id: 'reports',   name: 'Reports',   icon: 'report' },
+}
 
 function App() {
   const [page, setPage] = useState(() => localStorage.getItem('phstock_page') || 'dashboard')
@@ -213,12 +215,16 @@ function App() {
   async function fetchProfile() {
     const { data } = await supabase
       .from('profiles')
-      .select('role, location_id, full_name')
+      .select('role, location_id, full_name, allowed_pages')
       .eq('id', session.user.id)
       .single()
     if (data) {
       setProfile(data)
-      if (data.role !== 'admin') setPage('add')
+      if (data.role !== 'admin') {
+        const allowed = ['add', ...(data.allowed_pages || [])]
+        const saved = localStorage.getItem('phstock_page') || 'add'
+        setPage(allowed.includes(saved) ? saved : 'add')
+      }
     }
   }
 
@@ -235,7 +241,17 @@ function App() {
   }
 
   const isAdmin = profile?.role === 'admin'
-  const navItems = isAdmin ? ADMIN_NAV : WORKER_NAV
+  const workerAllowed = profile?.allowed_pages || []
+  const effectiveActiveLoc = isAdmin ? activeLoc : (profile?.location_id ?? 'all')
+  const canViewPage = (p) => isAdmin || p === 'add' || workerAllowed.includes(p)
+
+  const workerNav = [
+    { id: 'add', name: 'Add Entry', icon: 'plus' },
+    ...['dashboard', 'history', 'reports']
+      .filter(p => workerAllowed.includes(p))
+      .map(p => PAGE_NAV_DEFS[p]),
+  ]
+  const navItems = isAdmin ? ADMIN_NAV : workerNav
 
   if (authLoading || (session && !profile)) return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ink-3)' }}>
@@ -259,10 +275,10 @@ function App() {
           <FilterBar locations={locations} activeLoc={activeLoc} setActiveLoc={setActiveLoc} />
         )}
         <div className="pagebody">
-          {page === 'dashboard' && isAdmin && <Dashboard activeLoc={activeLoc} locations={locations} onNavigate={navigateTo} />}
-          {page === 'add'       && <AddEntry profile={profile} defaultLoc={activeLoc} locations={locations} onSaved={() => {}} />}
-          {page === 'history'   && isAdmin && <History activeLoc={activeLoc} locations={locations} searchQ={searchQ} profile={profile} />}
-          {page === 'reports'   && isAdmin && <Reports activeLoc={activeLoc} locations={locations} />}
+          {page === 'dashboard' && canViewPage('dashboard') && <Dashboard activeLoc={effectiveActiveLoc} locations={locations} onNavigate={navigateTo} />}
+          {page === 'add'       && <AddEntry profile={profile} defaultLoc={effectiveActiveLoc} locations={locations} onSaved={() => {}} />}
+          {page === 'history'   && canViewPage('history') && <History activeLoc={effectiveActiveLoc} locations={locations} searchQ={searchQ} profile={profile} />}
+          {page === 'reports'   && canViewPage('reports') && <Reports activeLoc={effectiveActiveLoc} locations={locations} />}
           {page === 'users'     && isAdmin && <UserManagement />}
         </div>
       </main>

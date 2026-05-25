@@ -75,7 +75,7 @@ function UserManagement() {
   async function fetchUsers() {
     const { data } = await supabase
       .from('profiles')
-      .select('id, full_name, role, location_id, locations(name)')
+      .select('id, full_name, role, location_id, allowed_pages, locations(name)')
       .order('role')
     if (data) setUsers(data)
   }
@@ -110,6 +110,23 @@ function UserManagement() {
       setError(err.message)
     }
     setLoading(false)
+  }
+
+  async function handleUpdatePermissions(userId, page, grant) {
+    const user = users.find(u => u.id === userId)
+    const current = user?.allowed_pages || []
+    const updated = grant
+      ? [...new Set([...current, page])]
+      : current.filter(p => p !== page)
+    setUsers(prev => prev.map(u => u.id === userId ? { ...u, allowed_pages: updated } : u))
+    const { error } = await supabase
+      .from('profiles')
+      .update({ allowed_pages: updated })
+      .eq('id', userId)
+    if (error) {
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, allowed_pages: current } : u))
+      setError('Failed to update permissions: ' + error.message)
+    }
   }
 
   async function handleDelete(userId, username) {
@@ -254,66 +271,99 @@ function UserManagement() {
           {users.length === 0 && (
             <p style={{ fontSize: 13, color: 'var(--ink-3)', padding: '12px 8px' }}>No users yet.</p>
           )}
-          {users.map(user => (
+          {users.map(user => {
+            const allowed = user.allowed_pages || []
+            return (
             <div key={user.id} style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12,
-              padding: '10px 12px',
               borderRadius: 'var(--radius-input)',
-              background: 'transparent',
               transition: 'background .12s var(--easing)',
-            }}
-              onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-2)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-            >
+            }}>
+              {/* Main row */}
               <div style={{
-                width: 32, height: 32, borderRadius: '50%',
-                background: user.role === 'admin'
-                  ? 'color-mix(in oklab, var(--primary) 15%, var(--surface))'
-                  : 'var(--bg-2)',
-                border: '1px solid ' + (user.role === 'admin'
-                  ? 'color-mix(in oklab, var(--primary) 30%, transparent)'
-                  : 'var(--line)'),
-                display: 'grid', placeItems: 'center',
-                fontSize: 11, fontWeight: 700,
-                color: user.role === 'admin' ? 'var(--primary)' : 'var(--ink-3)',
-                fontFamily: 'var(--font-sans)',
-                flexShrink: 0,
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '10px 12px',
               }}>
-                {initials(user.full_name)}
-              </div>
-
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.2 }}>
-                  {user.full_name}
+                <div style={{
+                  width: 32, height: 32, borderRadius: '50%',
+                  background: user.role === 'admin'
+                    ? 'color-mix(in oklab, var(--primary) 15%, var(--surface))'
+                    : 'var(--bg-2)',
+                  border: '1px solid ' + (user.role === 'admin'
+                    ? 'color-mix(in oklab, var(--primary) 30%, transparent)'
+                    : 'var(--line)'),
+                  display: 'grid', placeItems: 'center',
+                  fontSize: 11, fontWeight: 700,
+                  color: user.role === 'admin' ? 'var(--primary)' : 'var(--ink-3)',
+                  fontFamily: 'var(--font-sans)', flexShrink: 0,
+                }}>
+                  {initials(user.full_name)}
                 </div>
-                {user.locations?.name && (
-                  <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 2 }}>
-                    {user.locations.name}
+
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.2 }}>
+                    {user.full_name}
                   </div>
-                )}
+                  {user.locations?.name && (
+                    <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 2 }}>
+                      {user.locations.name}
+                    </div>
+                  )}
+                </div>
+
+                <RoleBadge role={user.role} />
+
+                <button
+                  onClick={() => handleDelete(user.id, user.full_name)}
+                  style={{
+                    fontSize: 12, color: 'var(--ink-3)', fontWeight: 600,
+                    padding: '4px 8px', borderRadius: 'var(--radius-input)',
+                    transition: 'color .12s, background .12s',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.color = 'var(--warn)'; e.currentTarget.style.background = 'color-mix(in oklab, var(--warn) 8%, transparent)' }}
+                  onMouseLeave={e => { e.currentTarget.style.color = 'var(--ink-3)'; e.currentTarget.style.background = 'transparent' }}
+                >
+                  Delete
+                </button>
               </div>
 
-              <RoleBadge role={user.role} />
-
-              <button
-                onClick={() => handleDelete(user.id, user.full_name)}
-                style={{
-                  fontSize: 12,
-                  color: 'var(--ink-3)',
-                  fontWeight: 600,
-                  padding: '4px 8px',
-                  borderRadius: 'var(--radius-input)',
-                  transition: 'color .12s, background .12s',
-                }}
-                onMouseEnter={e => { e.currentTarget.style.color = 'var(--warn)'; e.currentTarget.style.background = 'color-mix(in oklab, var(--warn) 8%, transparent)' }}
-                onMouseLeave={e => { e.currentTarget.style.color = 'var(--ink-3)'; e.currentTarget.style.background = 'transparent' }}
-              >
-                Delete
-              </button>
+              {/* Permission toggles — workers only */}
+              {user.role === 'worker' && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '0 12px 12px 56px',
+                }}>
+                  <span style={{ fontSize: 10, color: 'var(--ink-3)', fontFamily: 'var(--font-mono)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.08em', flexShrink: 0 }}>
+                    View access
+                  </span>
+                  {[
+                    { id: 'dashboard', label: 'Dashboard' },
+                    { id: 'history',   label: 'History' },
+                    { id: 'reports',   label: 'Reports' },
+                  ].map(({ id, label }) => {
+                    const on = allowed.includes(id)
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => handleUpdatePermissions(user.id, id, !on)}
+                        style={{
+                          fontSize: 11, fontWeight: 600, padding: '3px 10px',
+                          borderRadius: 'var(--radius-pill)',
+                          border: '1px solid ' + (on ? 'color-mix(in oklab, var(--primary) 35%, transparent)' : 'var(--line)'),
+                          background: on ? 'color-mix(in oklab, var(--primary) 12%, var(--surface))' : 'var(--surface-2)',
+                          color: on ? 'var(--primary)' : 'var(--ink-3)',
+                          cursor: 'pointer', transition: 'all .12s',
+                        }}
+                      >
+                        {on ? '✓ ' : ''}{label}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
             </div>
-          ))}
+          )})}
+
         </div>
       </div>
 
