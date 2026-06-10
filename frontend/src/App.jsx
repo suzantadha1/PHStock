@@ -4,6 +4,7 @@ import Dashboard from './pages/Dashboard'
 import AddEntry from './pages/AddEntry'
 import History from './pages/History'
 import Reports from './pages/Reports'
+import Solar from './pages/Solar'
 import Login from './pages/Login'
 import UserManagement from './pages/UserManagement'
 
@@ -12,6 +13,7 @@ const PAGE_META = {
   add:        { eyebrow: 'Action',    title: 'Add entry' },
   history:    { eyebrow: 'Ledger',    title: 'History' },
   reports:    { eyebrow: 'Insights',  title: 'Reports' },
+  solar:      { eyebrow: 'Energy',    title: 'Solar' },
   users:      { eyebrow: 'Admin',     title: 'Users' },
 }
 
@@ -29,6 +31,7 @@ export function Icon({ name, size = 16 }) {
     up:        <><polyline points="6,15 12,9 18,15" {...stroke}/></>,
     down:      <><polyline points="6,9 12,15 18,9" {...stroke}/></>,
     users:     <><circle cx="9" cy="7" r="4" {...stroke}/><path d="M2 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2" {...stroke}/><line x1="19" y1="8" x2="19" y2="14" {...stroke}/><line x1="16" y1="11" x2="22" y2="11" {...stroke}/></>,
+    solar:     <><circle cx="12" cy="12" r="4" {...stroke}/><line x1="12" y1="2" x2="12" y2="5" {...stroke}/><line x1="12" y1="19" x2="12" y2="22" {...stroke}/><line x1="2" y1="12" x2="5" y2="12" {...stroke}/><line x1="19" y1="12" x2="22" y2="12" {...stroke}/><line x1="4.9" y1="4.9" x2="7" y2="7" {...stroke}/><line x1="17" y1="17" x2="19.1" y2="19.1" {...stroke}/><line x1="4.9" y1="19.1" x2="7" y2="17" {...stroke}/><line x1="17" y1="7" x2="19.1" y2="4.9" {...stroke}/></>,
   }
   return <svg className="icn" width={s} height={s} viewBox="0 0 24 24">{paths[name]}</svg>
 }
@@ -121,18 +124,20 @@ function TopBar({ page, onNewEntry, onCancel, searchQ, setSearchQ }) {
         </div>
       </div>
       <div className="tb-spacer" />
-      <div className="tb-search">
-        <Icon name="search" />
-        <input
-          placeholder="Search grade, location, date…"
-          value={searchQ}
-          onChange={e => setSearchQ(e.target.value)}
-        />
-        {searchQ && (
-          <button type="button" onClick={() => setSearchQ('')} style={{ lineHeight: 1, color: 'var(--ink-3)' }}>✕</button>
-        )}
-      </div>
-      {page !== 'add' ? (
+      {page !== 'solar' && (
+        <div className="tb-search">
+          <Icon name="search" />
+          <input
+            placeholder="Search grade, location, date…"
+            value={searchQ}
+            onChange={e => setSearchQ(e.target.value)}
+          />
+          {searchQ && (
+            <button type="button" onClick={() => setSearchQ('')} style={{ lineHeight: 1, color: 'var(--ink-3)' }}>✕</button>
+          )}
+        </div>
+      )}
+      {page === 'solar' ? null : page !== 'add' ? (
         <button type="button" className="tb-btn is-primary" onClick={onNewEntry}>
           <Icon name="plus" /> New entry
         </button>
@@ -175,6 +180,7 @@ const ADMIN_NAV = [
   { id: 'add',       name: 'Add Entry', icon: 'plus' },
   { id: 'history',   name: 'History',   icon: 'history' },
   { id: 'reports',   name: 'Reports',   icon: 'report' },
+  { id: 'solar',     name: 'Solar',     icon: 'solar' },
   { id: 'users',     name: 'Users',     icon: 'users' },
 ]
 
@@ -182,6 +188,7 @@ const PAGE_NAV_DEFS = {
   dashboard: { id: 'dashboard', name: 'Dashboard', icon: 'dashboard' },
   history:   { id: 'history',   name: 'History',   icon: 'history' },
   reports:   { id: 'reports',   name: 'Reports',   icon: 'report' },
+  solar:     { id: 'solar',     name: 'Solar',     icon: 'solar' },
 }
 
 function App() {
@@ -247,7 +254,7 @@ function App() {
 
   const workerNav = [
     { id: 'add', name: 'Add Entry', icon: 'plus' },
-    ...['dashboard', 'history', 'reports']
+    ...['dashboard', 'history', 'reports', 'solar']
       .filter(p => workerAllowed.includes(p))
       .map(p => PAGE_NAV_DEFS[p]),
   ]
@@ -271,7 +278,7 @@ function App() {
           searchQ={searchQ}
           setSearchQ={setSearchQ}
         />
-        {page !== 'add' && page !== 'users' && isAdmin && (
+        {page !== 'add' && page !== 'users' && page !== 'solar' && isAdmin && (
           <FilterBar locations={locations} activeLoc={activeLoc} setActiveLoc={setActiveLoc} />
         )}
         <div className="pagebody">
@@ -279,6 +286,7 @@ function App() {
           {page === 'add'       && <AddEntry profile={profile} defaultLoc={effectiveActiveLoc} locations={locations} onSaved={() => {}} />}
           {page === 'history'   && canViewPage('history') && <History activeLoc={effectiveActiveLoc} locations={locations} searchQ={searchQ} profile={profile} isAdmin={isAdmin} />}
           {page === 'reports'   && canViewPage('reports') && <Reports activeLoc={effectiveActiveLoc} locations={locations} />}
+          {page === 'solar'     && canViewPage('solar') && <Solar isAdmin={isAdmin} profile={profile} />}
           {page === 'users'     && isAdmin && <UserManagement />}
         </div>
       </main>

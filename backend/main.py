@@ -69,7 +69,7 @@ async def delete_user(req: DeleteUserRequest):
 
 @app.patch("/users/permissions")
 async def update_permissions(req: UpdatePermissionsRequest):
-    valid = {"dashboard", "history", "reports"}
+    valid = {"dashboard", "history", "reports", "solar"}
     pages = [p for p in req.allowed_pages if p in valid]
     try:
         supabase.table("profiles").update({"allowed_pages": pages}).eq("id", req.user_id).execute()

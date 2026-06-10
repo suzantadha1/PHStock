@@ -339,6 +339,7 @@ function UserManagement() {
                     { id: 'dashboard', label: 'Dashboard' },
                     { id: 'history',   label: 'History' },
                     { id: 'reports',   label: 'Reports' },
+                    { id: 'solar',     label: 'Solar' },
                   ].map(({ id, label }) => {
                     const on = allowed.includes(id)
                     return (
