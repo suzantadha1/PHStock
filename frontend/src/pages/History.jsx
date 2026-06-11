@@ -2,6 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { Icon } from '../App'
 import DatePicker from '../components/DatePicker'
+import Toast from '../components/Toast'
+
+// Key for a daily-register row's verification (date + location + grade)
+const vkey = (date, locId, grade) => `${date}|${locId}|${grade}`
 
 const GRADE_COLORS = { A: 'var(--grade-a)', B: 'var(--grade-b)', C: 'var(--grade-c)', D: 'var(--grade-d)' }
 const SAFE_HUES = [180, 270, 315, 98, 225, 335, 195, 250, 168, 290]
@@ -283,6 +287,13 @@ function History({ activeLoc, locations, searchQ = '', profile, isAdmin }) {
   const [view, setView] = useState('register')
   const [editTarget, setEditTarget] = useState(null)
 
+  // Supervisor verification of register rows
+  const [regVerifs, setRegVerifs] = useState({})      // vkey -> { verified_name, verified_at, remark }
+  const [verifyingKey, setVerifyingKey] = useState(null)
+  const [pendingRow, setPendingRow] = useState(null)  // register row awaiting a remark in the popup
+  const [verifyRemark, setVerifyRemark] = useState('')
+  const [toast, setToast] = useState('')
+
   // Filters
   const [filterGrade, setFilterGrade] = useState('')
   const [filterFrom, setFilterFrom] = useState('')
@@ -488,6 +499,47 @@ function History({ activeLoc, locations, searchQ = '', profile, isAdmin }) {
   const regTotalPages = Math.max(1, Math.ceil(registerRows.length / PAGE_SIZE))
   const filteredPage = filtered.slice((movPage - 1) * PAGE_SIZE, movPage * PAGE_SIZE)
   const registerPage = registerRows.slice((regPage - 1) * PAGE_SIZE, regPage * PAGE_SIZE)
+
+  // Load verification status for the register rows currently in view
+  useEffect(() => {
+    if (view !== 'register' || registerRows.length === 0) return
+    let active = true
+    const dates = [...new Set(registerRows.map(r => r.date))]
+    supabase
+      .from('register_verifications')
+      .select('date, loc_id, grade, verified_name, verified_at, remark')
+      .in('date', dates)
+      .then(({ data }) => {
+        if (!active) return
+        const map = {}
+        ;(data || []).forEach(v => { map[vkey(v.date, v.loc_id, v.grade)] = v })
+        setRegVerifs(map)
+      })
+    return () => { active = false }
+  }, [view, registerRows])
+
+  async function handleVerifyRow(row, remark) {
+    const key = vkey(row.date, row.locId, row.grade)
+    if (verifyingKey) return
+    setVerifyingKey(key)
+    const { data: { user } } = await supabase.auth.getUser()
+    const name = profile?.full_name || 'Supervisor'
+    const trimmed = (remark || '').trim() || null
+    const { error } = await supabase.from('register_verifications').insert({
+      date: row.date,
+      loc_id: row.locId,
+      grade: row.grade,
+      verified_by: user?.id ?? null,
+      verified_name: name,
+      remark: trimmed,
+    })
+    setVerifyingKey(null)
+    if (error) { setToast('Could not verify: ' + error.message); return }
+    setRegVerifs(prev => ({ ...prev, [key]: { verified_name: name, verified_at: new Date().toISOString(), remark: trimmed } }))
+    setPendingRow(null)
+    setVerifyRemark('')
+    setToast('Row verified')
+  }
 
   return (
     <>
@@ -788,6 +840,9 @@ function History({ activeLoc, locations, searchQ = '', profile, isAdmin }) {
                     <th style={{ textAlign: 'right' }}>Sold</th>
                     <th style={{ textAlign: 'right' }}>Closing</th>
                     <th>Remarks</th>
+                    <th style={{ textAlign: 'center' }}>Verify</th>
+                    <th>Verification details</th>
+                    <th>Supervisor remark</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -815,6 +870,44 @@ function History({ activeLoc, locations, searchQ = '', profile, isAdmin }) {
                           {r.closing.toLocaleString()}
                         </td>
                         <td style={{ color: 'var(--ink-2)', fontSize: 13 }}>{r.remarks || <span style={{ color: 'var(--ink-3)' }}>—</span>}</td>
+                        {(() => {
+                          const key = vkey(r.date, r.locId, r.grade)
+                          const v = regVerifs[key]
+                          return (
+                            <>
+                              <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+                                {v ? (
+                                  <span style={{ color: 'var(--grade-a)', fontWeight: 700, fontSize: 12 }}>✓ Verified</span>
+                                ) : isAdmin ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => { setPendingRow(r); setVerifyRemark('') }}
+                                    disabled={verifyingKey === key}
+                                    style={{
+                                      fontSize: 11, fontWeight: 600, padding: '4px 12px',
+                                      borderRadius: 'var(--radius-pill)', cursor: 'pointer',
+                                      border: '1px solid var(--primary)', color: 'var(--primary)',
+                                      background: 'color-mix(in oklab, var(--primary) 8%, var(--surface))',
+                                    }}
+                                  >
+                                    {verifyingKey === key ? '…' : 'Verify'}
+                                  </button>
+                                ) : (
+                                  <span style={{ color: 'var(--ink-3)', fontSize: 12 }}>Pending</span>
+                                )}
+                              </td>
+                              <td style={{ fontSize: 11, color: 'var(--ink-2)', whiteSpace: 'nowrap' }}>
+                                {v ? (
+                                  <span>
+                                    <strong style={{ color: 'var(--ink)' }}>{v.verified_name}</strong>
+                                    <span style={{ color: 'var(--ink-3)' }}> · {new Date(v.verified_at).toLocaleString('en-GB', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' })}</span>
+                                  </span>
+                                ) : '—'}
+                              </td>
+                              <td style={{ fontSize: 13, color: v?.remark ? 'var(--ink)' : 'var(--ink-3)' }}>{v?.remark || '—'}</td>
+                            </>
+                          )
+                        })()}
                       </tr>
                     )
                   })}
@@ -850,6 +943,41 @@ function History({ activeLoc, locations, searchQ = '', profile, isAdmin }) {
         onCancel={() => setDeleteTarget(null)}
       />
     )}
+    {pendingRow && (
+      <div
+        onClick={() => { if (!verifyingKey) { setPendingRow(null); setVerifyRemark('') } }}
+        style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+      >
+        <div
+          onClick={e => e.stopPropagation()}
+          style={{ background: 'var(--surface)', border: '1px solid var(--line-strong)', borderRadius: 'var(--radius-card)', boxShadow: 'var(--shadow-2)', width: '100%', maxWidth: 440, padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}
+        >
+          <div>
+            <div className="card-title display">Verify register row</div>
+            <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 4 }}>
+              {fmt(pendingRow.date)} · {locations.find(l => String(l.id) === String(pendingRow.locId))?.name || pendingRow.locId} · {pendingRow.grade}
+            </div>
+          </div>
+          <textarea
+            autoFocus
+            value={verifyRemark}
+            onChange={e => setVerifyRemark(e.target.value)}
+            placeholder="Add a remark for this row (optional)…"
+            rows={4}
+            style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--line)', borderRadius: 'var(--radius-input)', background: 'var(--surface-2)', color: 'var(--ink)', fontSize: 14, fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' }}
+          />
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+            <button type="button" className="btn" onClick={() => { setPendingRow(null); setVerifyRemark('') }} disabled={!!verifyingKey}>
+              Cancel
+            </button>
+            <button type="button" className="btn primary" onClick={() => handleVerifyRow(pendingRow, verifyRemark)} disabled={!!verifyingKey}>
+              {verifyingKey ? 'Verifying…' : 'Verify & save'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    {toast && <Toast message={toast} onClose={() => setToast('')} />}
     </>
   )
 }

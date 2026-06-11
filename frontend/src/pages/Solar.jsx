@@ -4,12 +4,16 @@ import { Icon } from '../App'
 import Toast from '../components/Toast'
 import DatePicker from '../components/DatePicker'
 import {
-  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from 'recharts'
 
 const SUN = 'var(--grade-b)'
 const BEST = 'var(--grade-a)'
 const WORST = 'var(--warn)'
+
+// Distinct, stable colors assigned to each storage/site (by alphabetical order)
+// Warm earth tones to match the field theme
+const SITE_PALETTE = ['#c98a1b', '#b5632f', '#7a8b2e', '#a8472a', '#4f7a3f', '#9c5a3c', '#c9a227', '#87632b', '#6b8e23', '#a0521d']
 
 const PERIODS = [
   { days: 1,  label: 'Day' },
@@ -42,9 +46,9 @@ function KPI({ label, value, unit }) {
   )
 }
 
-function SiteRow({ label, energy, capacity, ratio, max, rank }) {
+function SiteRow({ label, energy, capacity, ratio, max, rank, color }) {
   const pct = max > 0 ? (energy / max) * 100 : 0
-  const barColor = rank === 'best' ? BEST : rank === 'worst' ? WORST : SUN
+  const barColor = rank === 'best' ? BEST : rank === 'worst' ? WORST : (color || SUN)
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
       <div style={{
@@ -55,6 +59,7 @@ function SiteRow({ label, energy, capacity, ratio, max, rank }) {
       }}>
         {rank === 'best' && <span title="Best">▲</span>}
         {rank === 'worst' && <span title="Least">▼</span>}
+        <span style={{ width: 8, height: 8, borderRadius: '50%', background: color || SUN, flexShrink: 0 }} />
         {label}
       </div>
       <div style={{ flex: 1, position: 'relative' }}>
@@ -95,14 +100,23 @@ function SiteRow({ label, energy, capacity, ratio, max, rank }) {
 
 function ChartTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null
+  const items = payload.filter(p => p.value > 0)
+  const total = payload.reduce((s, p) => s + (p.value || 0), 0)
   return (
     <div style={{
       background: 'var(--surface)', border: '1px solid var(--line-strong)',
-      borderRadius: 'var(--radius-input)', padding: '8px 12px', fontSize: 12, boxShadow: 'var(--shadow-2)',
+      borderRadius: 'var(--radius-input)', padding: '8px 12px', fontSize: 12, boxShadow: 'var(--shadow-2)', minWidth: 140,
     }}>
-      <div style={{ color: 'var(--ink-3)', marginBottom: 2 }}>{fmtDate(label)}</div>
-      <div style={{ fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
-        {fmtNum(payload[0].value)} kWh
+      <div style={{ color: 'var(--ink-3)', marginBottom: 4 }}>{fmtDate(label)}</div>
+      {items.map(p => (
+        <div key={p.dataKey} style={{ display: 'flex', justifyContent: 'space-between', gap: 14, marginBottom: 2 }}>
+          <span style={{ color: p.color || p.fill, fontWeight: 600 }}>● {p.name}</span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{fmtNum(p.value)}</span>
+        </div>
+      ))}
+      <div style={{ borderTop: '1px solid var(--line)', marginTop: 4, paddingTop: 4, display: 'flex', justifyContent: 'space-between' }}>
+        <span style={{ color: 'var(--ink-3)' }}>Total</span>
+        <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700 }}>{fmtNum(total)} kWh</span>
       </div>
     </div>
   )
@@ -164,6 +178,13 @@ function Solar({ isAdmin, profile }) {
     [siteFilter, sites],
   )
 
+  // Stable color per storage (sites arrive ordered by name)
+  const siteColors = useMemo(() => {
+    const m = {}
+    sites.forEach((s, i) => { m[s.id] = SITE_PALETTE[i % SITE_PALETTE.length] })
+    return m
+  }, [sites])
+
   // ---- Derived: window buckets + per-site aggregates ----
   const windowDays = useMemo(() => {
     const today = istToday()
@@ -177,11 +198,17 @@ function Solar({ isAdmin, profile }) {
     [readings, windowSet, scopeIds],
   )
 
+  // Stacked-by-site series: each day carries one `s_<id>` value per scoped storage
   const trend = useMemo(() => {
-    const byDate = {}
-    inWindow.forEach(r => { byDate[r.date] = (byDate[r.date] || 0) + Number(r.energy_kwh) })
-    return windowDays.map(date => ({ date, energy: byDate[date] || 0 }))
-  }, [inWindow, windowDays])
+    const k = (sid, date) => sid + '|' + date
+    const byKey = {}
+    inWindow.forEach(r => { byKey[k(r.site_id, r.date)] = (byKey[k(r.site_id, r.date)] || 0) + Number(r.energy_kwh) })
+    return windowDays.map(date => {
+      const row = { date }
+      scopeSites.forEach(s => { row['s_' + s.id] = byKey[k(s.id, date)] || 0 })
+      return row
+    })
+  }, [inWindow, windowDays, scopeSites])
 
   const perSite = useMemo(() => {
     const rows = scopeSites.map(s => {
@@ -227,13 +254,13 @@ function Solar({ isAdmin, profile }) {
 
   const reportRows = useMemo(() => {
     const byKey = {}
-    readings.forEach(r => { byKey[r.site_id + '|' + r.date] = Number(r.energy_kwh) })
+    readings.forEach(r => { byKey[r.site_id + '|' + r.date] = r })
     return reportDays.map(date => {
       const cells = sites.map(s => {
-        const energy = byKey[s.id + '|' + date]
+        const reading = byKey[s.id + '|' + date] || null
         const cap = s.capacity_kw || 0
-        const ratio = (energy != null && cap > 0) ? energy / cap : null
-        return { siteId: s.id, ratio, rank: null }
+        const ratio = (reading && cap > 0) ? Number(reading.energy_kwh) / cap : null
+        return { siteId: s.id, reading, ratio, rank: null }
       })
       const vals = cells.filter(c => c.ratio != null).map(c => c.ratio)
       if (vals.length >= 2) {
@@ -243,7 +270,7 @@ function Solar({ isAdmin, profile }) {
           else if (c.ratio === min) c.rank = 'worst'
         })
       }
-      return { date, cells, hasData: vals.length > 0 }
+      return { date, cells, hasData: cells.some(c => c.reading) }
     }).filter(row => row.hasData)
   }, [reportDays, readings, sites])
 
@@ -339,6 +366,15 @@ function Solar({ isAdmin, profile }) {
     if (siteFilter === id) setSiteFilter('all')
     setToast('Site deleted')
     fetchData()
+  }
+
+  async function handleDeleteReading(r) {
+    const siteName = sites.find(s => s.id === r.site_id)?.name || r.site_id
+    if (!confirm(`Delete the reading for ${siteName} on ${fmtDate(r.date)} (${fmtNum(r.energy_kwh)} kWh)?`)) return
+    const { error } = await supabase.from('solar_readings').delete().eq('id', r.id)
+    if (error) { setToast('Could not delete: ' + error.message); return }
+    setReadings(prev => prev.filter(x => x.id !== r.id))
+    setToast('Reading deleted')
   }
 
   if (loading) {
@@ -543,7 +579,10 @@ function Solar({ isAdmin, profile }) {
             </button>
             {sites.map(s => (
               <button key={s.id} type="button" className={'chip' + (siteFilter === s.id ? ' is-on' : '')} onClick={() => setSiteFilter(s.id)}>
-                <span>{s.name}</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: siteColors[s.id], flexShrink: 0 }} />
+                  {s.name}
+                </span>
               </button>
             ))}
           </div>
@@ -579,13 +618,7 @@ function Solar({ isAdmin, profile }) {
               <div className="card-bd">
                 {periodEnergy > 0 ? (
                   <ResponsiveContainer width="100%" height={240}>
-                    <AreaChart data={trend} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                      <defs>
-                        <linearGradient id="solarFill" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor={SUN} stopOpacity={0.35} />
-                          <stop offset="100%" stopColor={SUN} stopOpacity={0.02} />
-                        </linearGradient>
-                      </defs>
+                    <BarChart data={trend} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="2 4" stroke="var(--line)" vertical={false} />
                       <XAxis
                         dataKey="date"
@@ -596,13 +629,33 @@ function Solar({ isAdmin, profile }) {
                         interval="preserveStartEnd"
                       />
                       <YAxis tick={{ fontSize: 10, fontFamily: 'var(--font-mono)', fill: 'var(--ink-3)' }} tickLine={false} axisLine={false} width={36} />
-                      <Tooltip content={<ChartTooltip />} />
-                      <Area type="monotone" dataKey="energy" stroke={SUN} strokeWidth={2} fill="url(#solarFill)" />
-                    </AreaChart>
+                      <Tooltip content={<ChartTooltip />} cursor={{ fill: 'color-mix(in oklab, var(--ink) 6%, transparent)' }} />
+                      {scopeSites.map((s, i) => (
+                        <Bar
+                          key={s.id}
+                          dataKey={'s_' + s.id}
+                          name={s.name}
+                          stackId="gen"
+                          fill={siteColors[s.id]}
+                          radius={i === scopeSites.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]}
+                          maxBarSize={48}
+                        />
+                      ))}
+                    </BarChart>
                   </ResponsiveContainer>
                 ) : (
                   <div style={{ padding: '48px 22px', color: 'var(--ink-3)', textAlign: 'center', fontSize: 13 }}>
                     No readings in this window.
+                  </div>
+                )}
+                {periodEnergy > 0 && scopeSites.length > 1 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 16px', marginTop: 12 }}>
+                    {scopeSites.map(s => (
+                      <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+                        <span style={{ width: 10, height: 10, borderRadius: 3, background: siteColors[s.id], display: 'inline-block' }} />
+                        <span style={{ color: 'var(--ink-2)' }}>{s.name}</span>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
@@ -624,7 +677,7 @@ function Solar({ isAdmin, profile }) {
                 {perSite.length > 0 ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
                     {perSite.map(s => (
-                      <SiteRow key={s.id} label={s.label} energy={s.energy} capacity={s.capacity} ratio={s.ratio} max={maxSiteEnergy} rank={s.rank} />
+                      <SiteRow key={s.id} label={s.label} energy={s.energy} capacity={s.capacity} ratio={s.ratio} max={maxSiteEnergy} rank={s.rank} color={siteColors[s.id]} />
                     ))}
                   </div>
                 ) : (
@@ -659,10 +712,26 @@ function Solar({ isAdmin, profile }) {
                       </div>
                       <div style={{ color: 'var(--ink-3)', fontSize: 12, marginTop: 2 }}>{siteName}</div>
                     </div>
-                    <div className="delta-pill in" style={{ background: 'color-mix(in oklab, ' + SUN + ' 16%, var(--surface))', color: 'var(--ink)' }}>
+                    <div className="delta-pill in" style={{ background: 'color-mix(in oklab, ' + (siteColors[r.site_id] || SUN) + ' 16%, var(--surface))', color: 'var(--ink)' }}>
                       {fmtNum(r.energy_kwh)}
                     </div>
-                    <div className="loc">{String(siteName).slice(0, 4).toUpperCase()}</div>
+                    <div className="loc" style={{ color: siteColors[r.site_id] }}>{String(siteName).slice(0, 4).toUpperCase()}</div>
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteReading(r)}
+                        title="Delete reading"
+                        style={{
+                          fontSize: 12, fontWeight: 600, color: 'var(--ink-3)',
+                          padding: '4px 8px', borderRadius: 'var(--radius-input)', cursor: 'pointer',
+                          transition: 'color .12s, background .12s',
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.color = 'var(--warn)'; e.currentTarget.style.background = 'color-mix(in oklab, var(--warn) 8%, transparent)' }}
+                        onMouseLeave={e => { e.currentTarget.style.color = 'var(--ink-3)'; e.currentTarget.style.background = 'transparent' }}
+                      >
+                        Delete
+                      </button>
+                    )}
                   </div>
                 )
               })}
@@ -744,8 +813,14 @@ function Solar({ isAdmin, profile }) {
                               : c.rank === 'worst'
                               ? { background: 'color-mix(in oklab, ' + WORST + ' 18%, var(--surface))', color: WORST, fontWeight: 700 }
                               : {}
+                            const deletable = isAdmin && c.reading && c.ratio != null
                             return (
-                              <td key={c.siteId} style={{ border: '1px solid var(--line)', padding: '8px 12px', textAlign: 'center', fontFamily: 'var(--font-mono)', color: 'var(--ink-2)', ...tint }}>
+                              <td
+                                key={c.siteId}
+                                title={deletable ? 'Click to delete this reading (also removes it from the dashboard)' : undefined}
+                                onClick={deletable ? () => handleDeleteReading(c.reading) : undefined}
+                                style={{ border: '1px solid var(--line)', padding: '8px 12px', textAlign: 'center', fontFamily: 'var(--font-mono)', color: 'var(--ink-2)', cursor: deletable ? 'pointer' : 'default', ...tint }}
+                              >
                                 {c.ratio == null ? '—' : fmtNum(c.ratio)}
                               </td>
                             )
